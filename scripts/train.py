@@ -6,7 +6,7 @@ from scripts.preprocess import preprocess_data
 from scripts.save_and_load import save_model
 
 # 加载数据
-texts, labels = preprocess_data("data/dataset.csv")
+texts, labels = preprocess_data("data/IMDB_Dataset.csv")
 train_texts, val_texts, train_labels, val_labels = train_test_split(texts, labels, test_size=0.2)
 
 # 加载分词器和模型

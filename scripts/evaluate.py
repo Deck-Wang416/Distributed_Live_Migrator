@@ -5,7 +5,7 @@ from sklearn.metrics import accuracy_score
 from scripts.preprocess import preprocess_data
 
 # 加载数据
-texts, labels = preprocess_data("data/dataset.csv")
+texts, labels = preprocess_data("data/IMDB_Dataset.csv")
 
 # 加载分词器和模型
 tokenizer = BertTokenizer.from_pretrained("models/bert-base")
