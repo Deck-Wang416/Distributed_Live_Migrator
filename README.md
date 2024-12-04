@@ -25,6 +25,8 @@ A distributed deep learning training tool developed based on the FairScale frame
    python scripts/evaluate.py
 
 ## Project Structure
+
+```plaintext
 Distributed_Live_Migrator/
 ├── data/                   # Dataset folder (e.g., IMDB_Dataset.csv)
 ├── models/                 # Saved model files (e.g., trained BERT checkpoints)
@@ -35,6 +37,7 @@ Distributed_Live_Migrator/
 │   └── save_and_load.py    # Checkpoint saving and loading
 ├── requirements.txt        # Dependencies
 └── README.md               # Project documentation
+```
 
 ## Use Git LFS (Large File Storage)
 This project uses Git LFS to manage large files like datasets and model weights efficiently.
