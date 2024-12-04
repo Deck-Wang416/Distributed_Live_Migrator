@@ -35,3 +35,10 @@ Distributed_Live_Migrator/
 │   └── save_and_load.py    # Checkpoint saving and loading
 ├── requirements.txt        # Dependencies
 └── README.md               # Project documentation
+
+## Use Git LFS (Large File Storage)
+This project uses Git LFS to manage large files like datasets and model weights efficiently.
+
+**Install Git LFS**:
+   ```bash
+   git lfs install
