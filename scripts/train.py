@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from transformers import BertForSequenceClassification, BertTokenizer, AdamW
 from sklearn.model_selection import train_test_split
 from scripts.preprocess import preprocess_data
-from scripts.save_and_load import save_model
+from scripts.save_and_load import save_model, save_checkpoint, load_checkpoint
 
 # 检查设备 (MPS or CPU)
 if torch.backends.mps.is_available():
@@ -41,25 +41,20 @@ optimizer = AdamW(model.parameters(), lr=5e-5)
 # 模型移动到设备
 model.to(device)
 
-# 创建模型和检查点保存路径
+# 创建必要的保存路径
 os.makedirs("checkpoints", exist_ok=True)
 
-# 定义保存函数
-def save_checkpoint(model, optimizer, epoch, file_path="checkpoints/checkpoint.pt"):
-    """
-    保存模型和优化器的状态字典，以及训练进度。
-    """
-    checkpoint = {
-        "model_state_dict": model.state_dict(),
-        "optimizer_state_dict": optimizer.state_dict(),
-        "epoch": epoch,
-    }
-    torch.save(checkpoint, file_path)
-    print(f"Checkpoint saved at {file_path}")
+# 检查是否有现有的 Checkpoint
+checkpoint_path = "checkpoints/checkpoint_epoch_2.pt"  # 替换为目标文件路径
+if os.path.exists(checkpoint_path):
+    start_epoch = load_checkpoint(checkpoint_path, model, optimizer)
+    print(f"Resuming training from epoch {start_epoch + 1}")
+else:
+    start_epoch = 0
 
 # 训练
 print("开始训练...")
-for epoch in range(3):  # 示例 3 个 epoch
+for epoch in range(start_epoch, 3):  # 示例 3 个 epoch
     model.train()
     total_loss = 0
     for batch in train_loader:
