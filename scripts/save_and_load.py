@@ -3,11 +3,32 @@ import os
 import torch
 
 def save_model(model, tokenizer, save_dir):
+    """
+    Save the model and tokenizer to the specified directory.
+
+    Args:
+    - model (transformers.PreTrainedModel): The model to save.
+    - tokenizer (transformers.PreTrainedTokenizer): The tokenizer to save.
+    - save_dir (str): Directory to save the model and tokenizer.
+
+    Returns:
+    - None
+    """
     model.save_pretrained(save_dir)
     tokenizer.save_pretrained(save_dir)
     print(f"Model saved to {save_dir}")
 
 def load_model(save_dir):
+    """
+    Load the model and tokenizer from the specified directory.
+
+    Args:
+    - save_dir (str): Directory to load the model and tokenizer from.
+
+    Returns:
+    - model (transformers.PreTrainedModel): The loaded model.
+    - tokenizer (transformers.PreTrainedTokenizer): The loaded tokenizer.
+    """
     model = BertForSequenceClassification.from_pretrained(save_dir)
     tokenizer = BertTokenizer.from_pretrained(save_dir)
     print(f"Model loaded from {save_dir}")
@@ -15,7 +36,16 @@ def load_model(save_dir):
 
 def save_checkpoint(model, optimizer, epoch, file_path):
     """
-    保存模型、优化器状态和当前 epoch 到指定路径。
+    Save the model state, optimizer state, and current epoch to the specified file.
+
+    Args:
+    - model (torch.nn.Module): The model whose state to save.
+    - optimizer (torch.optim.Optimizer): The optimizer whose state to save.
+    - epoch (int): The current epoch to save.
+    - file_path (str): Path to save the checkpoint file.
+
+    Returns:
+    - None
     """
     checkpoint = {
         "model_state_dict": model.state_dict(),
@@ -27,15 +57,15 @@ def save_checkpoint(model, optimizer, epoch, file_path):
 
 def load_checkpoint(file_path, model, optimizer):
     """
-    从指定路径加载 checkpoint，恢复模型、优化器状态和当前 epoch。
+    Load the checkpoint from the specified file and restore the model, optimizer states, and epoch.
 
-    参数:
-    - file_path (str): Checkpoint 文件路径。
-    - model (torch.nn.Module): 要恢复的模型。
-    - optimizer (torch.optim.Optimizer): 要恢复的优化器。
+    Args:
+    - file_path (str): Path to the checkpoint file.
+    - model (torch.nn.Module): The model to restore.
+    - optimizer (torch.optim.Optimizer): The optimizer to restore.
 
-    返回:
-    - int: 恢复的 epoch 值。
+    Returns:
+    - int: The epoch restored from the checkpoint.
     """
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"Checkpoint file not found: {file_path}")

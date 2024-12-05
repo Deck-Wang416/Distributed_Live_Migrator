@@ -3,37 +3,37 @@ from sklearn.model_selection import train_test_split
 
 def preprocess_data(filepath, train_size=10000, test_size=2500):
     """
-    预处理 IMDB 数据集：
-    1. 划分数据集为训练集和测试集（80%/20%）。
-    2. 随机采样指定数量的训练集和测试集。
-    3. 转换标签为数值格式。
+    Preprocess the IMDB dataset:
+    1. Split the dataset into training and testing sets (80%/20%).
+    2. Randomly sample the specified number of training and testing examples.
+    3. Convert labels into numerical format.
 
-    参数：
-    - filepath (str): 数据集的路径。
-    - train_size (int): 训练集采样的数量。
-    - test_size (int): 测试集采样的数量。
+    Args:
+    - filepath (str): Path to the dataset file.
+    - train_size (int): Number of samples to include in the training set.
+    - test_size (int): Number of samples to include in the testing set.
 
-    返回：
-    - train_texts (list): 训练文本。
-    - train_labels (list): 训练标签。
-    - test_texts (list): 测试文本。
-    - test_labels (list): 测试标签。
+    Returns:
+    - train_texts (list): List of training texts.
+    - train_labels (list): List of training labels.
+    - test_texts (list): List of testing texts.
+    - test_labels (list): List of testing labels.
     """
-    # 读取数据
+    # Load data
     data = pd.read_csv(filepath)
 
-    # 划分为训练集和测试集
+    # Split into training and testing sets
     train_data, test_data = train_test_split(data, test_size=0.2, random_state=42)
 
-    # 从训练集中随机采样指定数量，从测试集中随机采样指定数量
+    # Randomly sample specified numbers of training and testing data
     train_data = train_data.sample(n=train_size, random_state=42)
     test_data = test_data.sample(n=test_size, random_state=42)
 
-    # 将标签映射为数值（positive -> 1, negative -> 0）
+    # Map labels to numerical values (positive -> 1, negative -> 0)
     train_data['label'] = train_data['sentiment'].map({'positive': 1, 'negative': 0})
     test_data['label'] = test_data['sentiment'].map({'positive': 1, 'negative': 0})
 
-    # 提取文本和标签
+    # Extract texts and labels
     train_texts = train_data['review'].tolist()
     train_labels = train_data['label'].tolist()
     test_texts = test_data['review'].tolist()
