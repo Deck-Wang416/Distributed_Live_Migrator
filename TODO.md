@@ -1,7 +1,8 @@
-1. Loaded the pre-trained BERT-Base model using the Hugging Face API.
-2. Found the IMDB dataset on Kaggle to perform a sentiment classification task.
-3. Selected 10,000 samples from the dataset: 80% for training and 20% for testing.
-4. Enabled GPU acceleration using the Metal framework for the M2 chip.
+1. Loaded the pre-trained BERT-Base model using the Hugging Face Transformers library.
+2. Retrieved the IMDB dataset from Kaggle for a sentiment classification task.
+3. Selected 12,500 samples from the dataset: First, split the dataset into 80% training (40,000) and 20% testing (10,000). Then, randomly sampled 25% of each split, resulting in 10,000 training samples and 2,500 testing samples.
+4. Enabled GPU acceleration using the Metal backend on an M2 chip.
 5. Trained a sentiment classification model based on BERT-Base, achieving an accuracy of 83%.
-6. Uploaded files (datasets and models sized 50–100MB) using Git LFS.
-7. Implemented train.py/save_checkpoint to save the training state locally.
+6. Managed large files (datasets and models sized 50–100 MB) using Git LFS for version control.
+7. Implemented save_checkpoint and load_checkpoint functions to save and restore model state, optimizer state, and training progress for checkpoint management.
+8. Resume from the last saved epoch after an interruption: if interrupted after saving the checkpoint for epoch 2, the training will resume from epoch 3, continuing from the saved state rather than the exact interruption point.
