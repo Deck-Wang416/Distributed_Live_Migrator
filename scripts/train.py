@@ -41,8 +41,21 @@ optimizer = AdamW(model.parameters(), lr=5e-5)
 # 模型移动到设备
 model.to(device)
 
-# 创建模型保存路径
-os.makedirs("models", exist_ok=True)
+# 创建模型和检查点保存路径
+os.makedirs("checkpoints", exist_ok=True)
+
+# 定义保存函数
+def save_checkpoint(model, optimizer, epoch, file_path="checkpoints/checkpoint.pt"):
+    """
+    保存模型和优化器的状态字典，以及训练进度。
+    """
+    checkpoint = {
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "epoch": epoch,
+    }
+    torch.save(checkpoint, file_path)
+    print(f"Checkpoint saved at {file_path}")
 
 # 训练
 print("开始训练...")
@@ -63,6 +76,9 @@ for epoch in range(3):  # 示例 3 个 epoch
     avg_loss = total_loss / len(train_loader)
     print(f"Epoch {epoch + 1}, Average Loss: {avg_loss:.4f}")
 
+    # 在每个 epoch 结束时保存 Checkpoint
+    save_checkpoint(model, optimizer, epoch + 1, file_path=f"checkpoints/checkpoint_epoch_{epoch + 1}.pt")
+
 # 验证
 print("开始验证...")
 model.eval()
@@ -80,7 +96,7 @@ with torch.no_grad():
 accuracy = correct / total
 print(f"Validation Accuracy: {accuracy:.4f}")
 
-# 保存模型
+# 保存最终模型
 print("Saving model to models/bert-base...")
 save_model(model, tokenizer, "models/bert-base")
 print("Model saved successfully!")
