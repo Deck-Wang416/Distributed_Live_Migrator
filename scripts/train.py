@@ -45,10 +45,20 @@ model.to(device)
 os.makedirs("checkpoints", exist_ok=True)
 
 # 检查是否有现有的 Checkpoint
-checkpoint_path = "checkpoints/checkpoint_epoch_2.pt"  # 替换为目标文件路径
-if os.path.exists(checkpoint_path):
-    start_epoch = load_checkpoint(checkpoint_path, model, optimizer)
-    print(f"Resuming training from epoch {start_epoch + 1}")
+checkpoint_dir = "checkpoints"
+latest_checkpoint = None
+
+if os.path.exists(checkpoint_dir):
+    # 查找目录中所有 .pt 文件
+    checkpoints = [f for f in os.listdir(checkpoint_dir) if f.endswith(".pt")]
+    if checkpoints:
+        # 找到最新的 Checkpoint 文件
+        latest_checkpoint = sorted(checkpoints)[-1]
+        checkpoint_path = os.path.join(checkpoint_dir, latest_checkpoint)
+        start_epoch = load_checkpoint(checkpoint_path, model, optimizer)
+        print(f"Resuming training from epoch {start_epoch + 1}")
+    else:
+        start_epoch = 0
 else:
     start_epoch = 0
 
