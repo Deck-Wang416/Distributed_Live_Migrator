@@ -18,11 +18,11 @@ A distributed deep learning training tool developed based on the FairScale frame
 
 3. **Train the model**:
    ```bash
-   python scripts/train.py
+   python3 -m scripts/train.py
 
 4. **Evaluate the model**:
    ```bash
-   python scripts/evaluate.py
+   python3 -m scripts/evaluate.py
 
 ## Project Structure
 
@@ -36,7 +36,8 @@ Distributed_Live_Migrator/
 │   ├── evaluate.py         # Model evaluation
 │   └── save_and_load.py    # Checkpoint saving and loading
 ├── requirements.txt        # Dependencies
-└── README.md               # Project documentation
+├── README.md               # Project documentation
+└── TODO.md                 # Project todo list
 ```
 
 ## Use Git LFS (Large File Storage)
