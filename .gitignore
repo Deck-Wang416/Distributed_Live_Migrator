@@ -5,4 +5,6 @@ __pycache__/
 
 .DS_Store
 
+data/IMDB_Dataset.csv
+
 checkpoints/
