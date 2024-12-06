@@ -1,3 +1,2 @@
 models/bert-base/*.safetensors filter=lfs diff=lfs merge=lfs -text
 models/bert-base/*.txt filter=lfs diff=lfs merge=lfs -text
-# data/IMDB_Dataset.csv filter=lfs diff=lfs merge=lfs -text

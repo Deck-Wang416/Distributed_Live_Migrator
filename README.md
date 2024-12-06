@@ -40,7 +40,7 @@ Distributed_Live_Migrator/
 └── TODO.md                 # Project todo list
 ```
 
-## Use Git LFS (Large File Storage)
+## Use Git LFS
 This project uses Git LFS to manage large files like datasets and model weights efficiently.
 
 **Install Git LFS**:
