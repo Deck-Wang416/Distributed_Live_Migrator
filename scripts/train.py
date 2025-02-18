@@ -54,6 +54,10 @@ optimizer = AdamW(model.parameters(), lr=5e-5)
 # Move model to the selected device
 model.to(device)
 
+# Simulate data parallelism (even with a single GPU)
+if torch.cuda.device_count() > 1:  # If you have multiple GPUs
+    model = torch.nn.DataParallel(model)
+
 # Create necessary directories for saving checkpoints
 os.makedirs("checkpoints", exist_ok=True)
 
