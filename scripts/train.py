@@ -5,14 +5,16 @@ from transformers import BertForSequenceClassification, BertTokenizer, AdamW
 from sklearn.model_selection import train_test_split
 from torch import distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data import DistributedSampler
 from preprocess import preprocess_data
 from save_and_load import save_model, save_checkpoint, load_checkpoint
 
 def main():
     # Initialize distributed training
-    dist.init_process_group(backend="nccl")  # Use NCCL for multi-GPU training
+    dist.init_process_group(backend="gloo")  # Use Gloo backend for multi-CPU training
     local_rank = int(os.environ["LOCAL_RANK"])  # Local rank (used for device assignment)
-    device = torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() else "cpu")
+    world_size = int(os.environ["WORLD_SIZE"])  # Total number of processes (used for distributed training)
+    device = torch.device("cpu")  # Since we're using CPUs, set device to "cpu"
     print(f"Using device {device}")
 
     # Load and preprocess the dataset
@@ -38,7 +40,7 @@ def main():
         val_texts, truncation=True, padding=True, max_length=128, return_tensors="pt"
     )
 
-    # Create datasets and data loaders
+    # Create datasets
     train_dataset = TensorDataset(
         train_encodings["input_ids"], train_encodings["attention_mask"], torch.tensor(train_labels)
     )
@@ -46,12 +48,24 @@ def main():
         val_encodings["input_ids"], val_encodings["attention_mask"], torch.tensor(val_labels)
     )
 
-    train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=8)
+    # Distributed sampler to ensure each process gets different data
+    train_sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=local_rank)
+    val_sampler = DistributedSampler(val_dataset, num_replicas=world_size, rank=local_rank)
+
+    # DataLoader with DistributedSampler
+    train_loader = DataLoader(train_dataset, batch_size=8, sampler=train_sampler)
+    val_loader = DataLoader(val_dataset, batch_size=8, sampler=val_sampler)
 
     # Initialize optimizer
     optimizer = AdamW(model.parameters(), lr=5e-5)
 
+    # Load checkpoint if available
+    checkpoint_dir = "checkpoints"
+    checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_epoch_1_worker_{local_rank}.pt")
+    start_epoch = 0
+    if os.path.exists(checkpoint_path):
+        start_epoch = load_checkpoint(checkpoint_path, model, optimizer)
+    
     # Move model to the selected device
     model.to(device)
 
@@ -59,9 +73,10 @@ def main():
     model = DDP(model, device_ids=[local_rank])
 
     # Training loop
-    for epoch in range(3):  # Example: 3 epochs
+    for epoch in range(start_epoch, 3):  # Start from the restored epoch
         model.train()
         total_loss = 0
+        train_sampler.set_epoch(epoch)  # Ensure data is shuffled differently in each epoch
         for batch in train_loader:
             input_ids, attention_mask, labels = [b.to(device) for b in batch]
 
@@ -77,7 +92,6 @@ def main():
         print(f"Epoch {epoch + 1}, Average Loss: {avg_loss:.4f}")
 
         # Save checkpoint
-        checkpoint_dir = "checkpoints"
         os.makedirs(checkpoint_dir, exist_ok=True)
         save_checkpoint(model, optimizer, epoch + 1, file_path=f"{checkpoint_dir}/checkpoint_epoch_{epoch + 1}_worker_{local_rank}.pt")
 
