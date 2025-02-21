@@ -61,8 +61,8 @@ def main():
 
     # Load checkpoint if available
     checkpoint_dir = "checkpoints"
-    checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_epoch_1_worker_{local_rank}.pt")
     start_epoch = 0
+    checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_epoch_{start_epoch + 1}_worker_{local_rank}.pt")
     if os.path.exists(checkpoint_path):
         start_epoch = load_checkpoint(checkpoint_path, model, optimizer)
     
@@ -91,7 +91,7 @@ def main():
         avg_loss = total_loss / len(train_loader)
         print(f"Epoch {epoch + 1}, Average Loss: {avg_loss:.4f}")
 
-        # Save checkpoint
+       # Save checkpoint
         os.makedirs(checkpoint_dir, exist_ok=True)
         save_checkpoint(model, optimizer, epoch + 1, file_path=f"{checkpoint_dir}/checkpoint_epoch_{epoch + 1}_worker_{local_rank}.pt")
 
