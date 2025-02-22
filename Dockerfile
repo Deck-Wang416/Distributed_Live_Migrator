@@ -14,10 +14,12 @@ RUN apt-get update && apt-get install -y \
     gcc \
     curl \
     libclang-dev \
-    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain stable -y \
-    && . $HOME/.cargo/env \
-    && pip install --upgrade pip \
-    && pip install tokenizers==0.10.3 \
+    rustc \
+    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain nightly -y
+
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+RUN pip install --upgrade pip \
     && pip install -r requirements.txt
 
 ENV PYTHONPATH=/app
