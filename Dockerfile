@@ -14,8 +14,11 @@ RUN apt-get update && apt-get install -y \
     gcc \
     curl \
     libclang-dev \
-    rustc \
-    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain nightly -y
+    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain=1.72.1 -y \
+    && export PATH="/root/.cargo/bin:${PATH}" \
+    && export RUSTUP_TOOLCHAIN=1.72.1 \
+    && pip install --upgrade pip \
+    && pip install -r requirements.txt
 
 ENV PATH="/root/.cargo/bin:${PATH}"
 
