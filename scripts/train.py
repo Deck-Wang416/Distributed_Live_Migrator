@@ -70,7 +70,7 @@ def main():
     model.to(device)
 
     # Use DistributedDataParallel
-    model = DDP(model, device_ids=[local_rank])
+    model = DDP(model)
 
     # Training loop
     for epoch in range(start_epoch, 3):  # Start from the restored epoch
