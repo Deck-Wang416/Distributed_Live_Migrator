@@ -15,23 +15,11 @@ spec:
       containers:
       - name: trainer
         image: deckwang/distributed-trainer:latest
-        resources:
-          limits:
-            memory: "4Gi"
-            cpu: "2"
-          requests:
-            memory: "2Gi"
-            cpu: "1"
-        env:
-          - name: RANK
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.name
-          - name: WORLD_SIZE
-            value: "2"
-          - name: MASTER_ADDR
-            value: "localhost"
-          - name: MASTER_PORT
-            value: "29500"
-          - name: LOCAL_RANK
-            value: "0"
+        imagePullPolicy: Always
+        volumeMounts:
+        - mountPath: "/app/data"
+          name: data-volume
+      volumes:
+      - name: data-volume
+        persistentVolumeClaim:
+          claimName: data-pvc

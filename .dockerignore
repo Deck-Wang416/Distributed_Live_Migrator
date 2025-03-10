@@ -1,0 +1,7 @@
+__pycache__/
+*.log
+*.csv
+*.json
+data/
+checkpoints/
+root/.rustup/
