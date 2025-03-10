@@ -10,12 +10,14 @@ from preprocess import preprocess_data
 from save_and_load import save_model, save_checkpoint, load_checkpoint
 
 def main():
-    # Initialize distributed training
-    dist.init_process_group(backend="gloo")  # Use Gloo backend for multi-CPU training
-    local_rank = int(os.environ["LOCAL_RANK"])  # Local rank (used for device assignment)
-    world_size = int(os.environ["WORLD_SIZE"])  # Total number of processes (used for distributed training)
-    device = torch.device("cpu")  # Since we're using CPUs, set device to "cpu"
-    print(f"Using device {device}")
+    # Parse RANK
+    pod_name = os.environ["POD_NAME"]
+    rank = int(pod_name.split("-")[-1])
+    world_size = int(os.environ["WORLD_SIZE"])
+    local_rank = int(os.environ["LOCAL_RANK"])
+    device = torch.device("cpu")
+
+    dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
 
     # Load and preprocess the dataset
     train_texts, train_labels, test_texts, test_labels = preprocess_data(
