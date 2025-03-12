@@ -19,4 +19,4 @@
    - The recovered node automatically loads the latest checkpoint and resumes training in sync with the cluster.
    - Only the primary process handles checkpoint saving and loading.
 15. Resolved storage limitations by switching from **Azure Disk** (ReadWriteOnce) to **Azure File** (ReadWriteMany) to enable multiple nodes to share training data.
-16. Optimized memory allocation by reducing `batch_size` from `8` to `4` and setting `memory limits` to `3Gi` per node to prevent OOM issues.
+16. Optimized memory allocation by reducing `batch_size` from `8` to `4` and setting `memory limits` to `3Gi` per node to prevent out-of-memory (OOM) issues.
