@@ -6,23 +6,30 @@ A distributed deep learning training tool developed based on the FairScale frame
 - **Model Parallelism**: Utilize FairScale's pipeline parallelism to distribute training across GPUs/nodes.
 - **Hugging Face Integration**: Train BERT-Base for binary classification tasks with Hugging Face Transformers.
 - **Cloud Storage**: Azure Blob Storage and Azure Files support for distributed checkpoint management.
+- **Kubernetes Deployment**: Fully integrated with Kubernetes, supporting distributed training in AKS.
 
 ## Setup
 1. **Install dependencies**:
    ```bash
    pip install -r requirements.txt
 
-2. **Prepare the dataset**:
-   - Place the `IMDB_Dataset.csv` in the `data/` folder.
-   - Ensure the dataset is correctly preprocessed with `scripts/preprocess.py`.
-
-3. **Train the model**:
+2. **Build and push Docker image**:
    ```bash
-   python3 -m scripts/train.py
+   docker buildx build --platform linux/amd64 -t deckwang/distributed-trainer:latest .
+   docker push deckwang/distributed-trainer:latest
 
-4. **Evaluate the model**:
+3. **Deploy to Kubernetes**:
    ```bash
-   python3 -m scripts/evaluate.py
+   kubectl apply -f k8s/pvc-uploader.yaml
+   kubectl apply -f k8s/persistent-volume.yaml
+   kubectl apply -f k8s/headless-service.yaml
+   kubectl apply -f k8s/statefulset.yaml
+
+4. **Monitor the deployment**:
+   ```bash
+   kubectl get pods
+   kubectl logs -f distributed-trainer-0 -c trainer
+   kubectl logs -f distributed-trainer-1 -c trainer
 
 ## Project Structure
 
@@ -35,14 +42,16 @@ Distributed_Live_Migrator/
 │   ├── train.py            # Training the BERT model
 │   ├── evaluate.py         # Model evaluation
 │   └── save_and_load.py    # Checkpoint saving and loading
-├── requirements.txt        # Dependencies
-├── README.md               # Project documentation
-└── TODO.md                 # Project todo list
+├── k8s/                    # Kubernetes deployment configuration
+│   ├── headless-service.yaml   # Service configuration for inter-pod communication
+│   ├── persistent-volume.yaml  # Persistent volume and claim for data storage
+│   ├── pvc-uploader.yaml       # Utility for uploading dataset to PVC
+│   ├── statefulset.yaml        # StatefulSet managing distributed training pods
+├── .dockerignore            # Ignore unnecessary files in Docker builds
+├── .gitignore               # Ignore unnecessary files in Git repository
+├── .gitattributes           # Configuration for Git LFS
+├── Dockerfile               # Docker image definition for training
+├── requirements.txt         # Dependencies
+├── README.md                # Project documentation
+└── TODO.md                  # Project todo list
 ```
-
-## Use Git LFS
-This project uses Git LFS to manage large files like datasets and model weights efficiently.
-
-**Install Git LFS**:
-   ```bash
-   git lfs install
