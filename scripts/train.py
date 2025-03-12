@@ -55,8 +55,8 @@ def main():
     val_sampler = DistributedSampler(val_dataset, num_replicas=world_size, rank=local_rank)
 
     # DataLoader with DistributedSampler
-    train_loader = DataLoader(train_dataset, batch_size=8, sampler=train_sampler)
-    val_loader = DataLoader(val_dataset, batch_size=8, sampler=val_sampler)
+    train_loader = DataLoader(train_dataset, batch_size=4, sampler=train_sampler)
+    val_loader = DataLoader(val_dataset, batch_size=4, sampler=val_sampler)
 
     # Initialize optimizer
     optimizer = AdamW(model.parameters(), lr=5e-5)
