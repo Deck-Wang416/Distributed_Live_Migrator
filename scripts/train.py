@@ -1,4 +1,6 @@
 import os
+import sys
+import subprocess
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 from transformers import BertForSequenceClassification, BertTokenizer, AdamW
@@ -62,7 +64,8 @@ def main():
     optimizer = AdamW(model.parameters(), lr=5e-5)
 
     # Load checkpoint if available
-    checkpoint_dir = "checkpoints"
+    checkpoint_dir = "/app/checkpoints"  # 确保 checkpoints 目录正确
+    os.makedirs(checkpoint_dir, exist_ok=True)
     start_epoch = 0
     checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_epoch_{start_epoch + 1}_worker_{local_rank}.pt")
     if os.path.exists(checkpoint_path):
@@ -94,7 +97,6 @@ def main():
         print(f"Epoch {epoch + 1}, Average Loss: {avg_loss:.4f}")
 
        # Save checkpoint
-        os.makedirs(checkpoint_dir, exist_ok=True)
         save_checkpoint(model, optimizer, epoch + 1, file_path=f"{checkpoint_dir}/checkpoint_epoch_{epoch + 1}_worker_{local_rank}.pt")
 
     # Validation
@@ -117,6 +119,12 @@ def main():
     # Save the final model
     save_model(model, tokenizer, "models/bert-base")
     print("Model saved successfully!")
+
+    if rank == 0:
+        print("Training complete. Deleting StatefulSet.")
+        subprocess.run(["kubectl", "delete", "statefulset", "distributed-trainer", "--namespace", "default"], check=True)
+
+    sys.exit(0)
 
 if __name__ == "__main__":
     main()
