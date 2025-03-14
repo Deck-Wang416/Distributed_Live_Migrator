@@ -22,14 +22,28 @@ A distributed deep learning training tool developed based on the FairScale frame
    ```bash
    kubectl apply -f k8s/pvc-uploader.yaml
    kubectl apply -f k8s/persistent-volume.yaml
+   kubectl apply -f k8s/checkpoint-pvc.yaml
+   kubectl apply -f k8s/model-pvc.yaml
    kubectl apply -f k8s/headless-service.yaml
    kubectl apply -f k8s/statefulset.yaml
+   kubectl apply -f k8s/debug-pod.yaml
 
 4. **Monitor the deployment**:
    ```bash
    kubectl get pods
    kubectl logs -f distributed-trainer-0 -c trainer
    kubectl logs -f distributed-trainer-1 -c trainer
+
+## Verify
+1. **Check checkpoints**:
+   ```bash
+   kubectl exec -it distributed-trainer-0 -- /bin/bash
+   ls -lh /app/checkpoints
+
+2. **Check model**:
+   ```bash
+   kubectl exec -it debug-pod -- /bin/bash
+   ls -lh /app/models
 
 ## Project Structure
 
@@ -46,7 +60,10 @@ Distributed_Live_Migrator/
 │   ├── headless-service.yaml   # Service configuration for inter-pod communication
 │   ├── persistent-volume.yaml  # Persistent volume and claim for data storage
 │   ├── pvc-uploader.yaml       # Utility for uploading dataset to PVC
+│   ├── checkpoint-pvc.yaml      # PVC for checkpoint storage
+│   ├── model-pvc.yaml           # PVC for model storage
 │   ├── statefulset.yaml        # StatefulSet managing distributed training pods
+│   ├── debug-pod.yaml          # Debug pod for verifying saved models
 ├── .dockerignore            # Ignore unnecessary files in Docker builds
 ├── .gitignore               # Ignore unnecessary files in Git repository
 ├── .gitattributes           # Configuration for Git LFS
