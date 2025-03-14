@@ -19,4 +19,7 @@
    - The recovered node automatically loads the latest checkpoint and resumes training in sync with the cluster.
    - Only the primary process handles checkpoint saving and loading.
 15. Resolved storage limitations by switching from **Azure Disk** (ReadWriteOnce) to **Azure File** (ReadWriteMany) to enable multiple nodes to share training data.
-16. Optimized memory allocation by reducing `batch_size` from `8` to `4` and setting `memory limits` to `3Gi` per node to prevent out-of-memory (OOM) issues.
+16. Primary node deletes the StatefulSet after training completion to prevent automatic restart.
+17. Created and mounted Persistent Volume Claims (PVCs) for both checkpoints and trained models.
+18. Added Hugging Face cache (with `emptyDir: {}`) to prevent excessive memory usage, mitigating OOMKilled and CrashLoopBackOff issues.
+19. Validated data parallelism by recording checkpoints for three epochs, testing failure recovery by simulating node disconnections. Verified the well-trained model through the debug pod.
