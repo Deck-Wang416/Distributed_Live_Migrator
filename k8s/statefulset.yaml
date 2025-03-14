@@ -46,6 +46,8 @@ spec:
           name: checkpoint-volume
         - mountPath: "/app/models"
           name: model-volume
+        - mountPath: "/app/hf_cache"
+          name: hf-cache
       volumes:
       - name: data-volume
         persistentVolumeClaim:
@@ -56,3 +58,5 @@ spec:
       - name: model-volume
         persistentVolumeClaim:
           claimName: model-pvc
+      - name: hf-cache
+        emptyDir: {}
