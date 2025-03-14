@@ -4,6 +4,7 @@ import subprocess
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 from transformers import BertForSequenceClassification, BertTokenizer, AdamW
+from transformers.utils import logging
 from sklearn.model_selection import train_test_split
 from torch import distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -31,10 +32,13 @@ def main():
         train_texts, train_labels, test_size=0.2, random_state=42
     )
 
+    # Set logging to reduce memory usage
+    logging.set_verbosity_error()
+
     # Load tokenizer and model
     model_name = "bert-base-uncased"
-    tokenizer = BertTokenizer.from_pretrained(model_name)
-    model = BertForSequenceClassification.from_pretrained(model_name, num_labels=2)
+    tokenizer = BertTokenizer.from_pretrained(model_name, cache_dir="/app/hf_cache")
+    model = BertForSequenceClassification.from_pretrained(model_name, num_labels=2, cache_dir="/app/hf_cache")
 
     # Encode the data
     train_encodings = tokenizer(
@@ -57,14 +61,14 @@ def main():
     val_sampler = DistributedSampler(val_dataset, num_replicas=world_size, rank=local_rank)
 
     # DataLoader with DistributedSampler
-    train_loader = DataLoader(train_dataset, batch_size=4, sampler=train_sampler)
-    val_loader = DataLoader(val_dataset, batch_size=4, sampler=val_sampler)
+    train_loader = DataLoader(train_dataset, batch_size=2, sampler=train_sampler)
+    val_loader = DataLoader(val_dataset, batch_size=2, sampler=val_sampler)
 
     # Initialize optimizer
     optimizer = AdamW(model.parameters(), lr=5e-5)
 
     # Load checkpoint if available
-    checkpoint_dir = "/app/checkpoints"  # 确保 checkpoints 目录正确
+    checkpoint_dir = "/app/checkpoints"
     os.makedirs(checkpoint_dir, exist_ok=True)
     start_epoch = 0
     checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_epoch_{start_epoch + 1}_worker_{local_rank}.pt")
@@ -88,15 +92,20 @@ def main():
             optimizer.zero_grad()
             outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
             loss = outputs.loss
+
             loss.backward()
             optimizer.step()
 
             total_loss += loss.item()
-        
+
+            loss.detach()
+            del input_ids, attention_mask, labels, outputs, loss
+            torch.cuda.empty_cache()
+
         avg_loss = total_loss / len(train_loader)
         print(f"Epoch {epoch + 1}, Average Loss: {avg_loss:.4f}")
 
-       # Save checkpoint
+        # Save checkpoint
         save_checkpoint(model, optimizer, epoch + 1, file_path=f"{checkpoint_dir}/checkpoint_epoch_{epoch + 1}_worker_{local_rank}.pt")
 
     # Validation
