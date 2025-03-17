@@ -6,10 +6,8 @@ COPY . /app
 
 COPY requirements.txt /app/
 
-RUN apt-get update --allow-releaseinfo-change \
-    && apt-get install --reinstall -y debian-archive-keyring \
-    && apt-get clean && rm -rf /var/lib/apt/lists/* \
-    && apt-get update --allow-releaseinfo-change \
+RUN rm -rf /var/lib/apt/lists/* \
+    && apt-get update --allow-insecure-repositories \
     && apt-get install -y --no-install-recommends \
         libatlas-base-dev \
         liblapack-dev \
@@ -19,12 +17,12 @@ RUN apt-get update --allow-releaseinfo-change \
         curl \
         libclang-dev \
         ca-certificates \
-    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain=1.72.1 -y \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* \
+    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain=1.72.1 --profile minimal -y \
     && export PATH="/root/.cargo/bin:${PATH}" \
     && export RUSTUP_TOOLCHAIN=1.72.1 \
     && pip install --upgrade pip \
-    && pip install -r requirements.txt \
-    && rm -rf /var/lib/apt/lists/*
+    && pip install --no-cache-dir -r requirements.txt
 
 ENV PATH="/root/.cargo/bin:${PATH}"
 
