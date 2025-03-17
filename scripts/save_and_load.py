@@ -3,6 +3,14 @@ import os
 import torch
 from torch import distributed as dist
 
+def remove_module_prefix(state_dict):
+    """Remove 'module.' prefix from DistributedDataParallel models"""
+    new_state_dict = {}
+    for k, v in state_dict.items():
+        new_key = k.replace("module.", "")  # Remove "module." prefix
+        new_state_dict[new_key] = v
+    return new_state_dict
+
 def save_model(model, tokenizer, save_dir):
     """
     Save the model and tokenizer to the specified directory.
@@ -43,7 +51,7 @@ def load_checkpoint(file_path, model, optimizer):
     """
     if os.path.exists(file_path):
         checkpoint = torch.load(file_path, map_location="cpu")
-        model.load_state_dict(checkpoint["model_state_dict"])
+        model.load_state_dict(remove_module_prefix(checkpoint["model_state_dict"]))
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         epoch = checkpoint["epoch"]
         print(f"Checkpoint loaded from {file_path}")
