@@ -126,7 +126,7 @@ def main():
     print(f"Validation Accuracy: {accuracy:.4f}")
 
     # Save the final model
-    save_model(model, tokenizer, "models/bert-base")
+    save_model(model.module, tokenizer, "models/bert-base") 
     print("Model saved successfully!")
 
     if rank == 0:
