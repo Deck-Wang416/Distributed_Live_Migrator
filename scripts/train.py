@@ -1,6 +1,5 @@
 import os
 import sys
-import subprocess
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 from transformers import BertForSequenceClassification, BertTokenizer, AdamW
@@ -11,6 +10,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DistributedSampler
 from preprocess import preprocess_data
 from save_and_load import save_model, save_checkpoint, load_checkpoint
+from kubernetes import client, config
 
 def main():
     # Parse RANK
@@ -23,7 +23,7 @@ def main():
     dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
 
     # Load and preprocess the dataset
-    train_texts, train_labels, test_texts, test_labels = preprocess_data(
+    train_texts, train_labels, _, _ = preprocess_data(
         "data/IMDB_Dataset.csv", train_size=1000, test_size=500
     )
 
@@ -129,9 +129,21 @@ def main():
     save_model(model.module, tokenizer, "models/bert-base") 
     print("Model saved successfully!")
 
+    def delete_statefulset():
+        config.load_incluster_config()
+        api_instance = client.AppsV1Api()
+        namespace = "default"
+        name = "distributed-trainer"
+
+        try:
+            api_instance.delete_namespaced_stateful_set(name, namespace)
+            print(f"StatefulSet {name} deleted successfully.")
+        except Exception as e:
+            print(f"Failed to delete StatefulSet: {e}")
+
     if rank == 0:
         print("Training complete. Deleting StatefulSet.")
-        subprocess.run(["kubectl", "delete", "statefulset", "distributed-trainer", "--namespace", "default"], check=True)
+        delete_statefulset()
 
     sys.exit(0)
 
