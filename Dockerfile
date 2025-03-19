@@ -17,6 +17,7 @@ RUN rm -rf /var/lib/apt/lists/* \
         curl \
         libclang-dev \
         ca-certificates \
+        iproute2 \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* \
     && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain=1.72.1 --profile minimal -y \
     && export PATH="/root/.cargo/bin:${PATH}" \
