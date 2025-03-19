@@ -22,4 +22,8 @@
 16. Primary node deletes the StatefulSet after training completion to prevent automatic restart.
 17. Created and mounted Persistent Volume Claims (PVCs) for both checkpoints and trained models.
 18. Added Hugging Face cache (with `emptyDir: {}`) to prevent excessive memory usage, mitigating OOMKilled and CrashLoopBackOff issues.
-19. Validated data parallelism by recording checkpoints for three epochs, testing failure recovery by simulating node disconnections. Verified the well-trained model through the debug pod.
+19. Resolved state_dict key mismatch during checkpoint loading by stripping the "module." prefix in `load_checkpoint()`.
+20. Fixed `model.save_pretrained()` issue by unwrapping the DDP-wrapped model before saving.
+21. Replaced `kubectl delete statefulset` with Kubernetes API calls since `kubectl` was not available in the container.
+22. Configured RBAC by creating a ClusterRole allowing StatefulSet deletion and binding it to the default ServiceAccount.
+23. Validated data parallelism by recording checkpoints for three epochs, testing failure recovery by simulating node disconnections. Verified the well-trained model through the debug pod.

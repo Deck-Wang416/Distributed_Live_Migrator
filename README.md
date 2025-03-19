@@ -27,6 +27,7 @@ A distributed deep learning training tool developed based on the FairScale frame
    kubectl apply -f k8s/headless-service.yaml
    kubectl apply -f k8s/statefulset.yaml
    kubectl apply -f k8s/debug-pod.yaml
+   kubectl apply -f k8s/rbac.yaml
 
 4. **Monitor the deployment**:
    ```bash
@@ -43,7 +44,7 @@ A distributed deep learning training tool developed based on the FairScale frame
 2. **Check model**:
    ```bash
    kubectl exec -it debug-pod -- /bin/bash
-   ls -lh /app/models
+   ls -lh /app/models/bert-base
 
 ## Project Structure
 
@@ -60,8 +61,9 @@ Distributed_Live_Migrator/
 │   ├── headless-service.yaml   # Service configuration for inter-pod communication
 │   ├── persistent-volume.yaml  # Persistent volume and claim for data storage
 │   ├── pvc-uploader.yaml       # Utility for uploading dataset to PVC
-│   ├── checkpoint-pvc.yaml      # PVC for checkpoint storage
-│   ├── model-pvc.yaml           # PVC for model storage
+│   ├── checkpoint-pvc.yaml     # PVC for checkpoint storage
+│   ├── model-pvc.yaml          # PVC for model storage
+│   ├── rbac.yaml               # Role-Based Access Control configuration
 │   ├── statefulset.yaml        # StatefulSet managing distributed training pods
 │   ├── debug-pod.yaml          # Debug pod for verifying saved models
 ├── .dockerignore            # Ignore unnecessary files in Docker builds
