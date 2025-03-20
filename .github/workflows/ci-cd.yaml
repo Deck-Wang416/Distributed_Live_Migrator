@@ -1,0 +1,55 @@
+name: CI/CD to AKS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  DOCKER_IMAGE: deckwang/distributed-trainer:latest
+  RESOURCE_GROUP: LiveMigrateResourceGroup
+  CLUSTER_NAME: live-migrate-cluster
+  AKS_NAMESPACE: default
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Log in to Docker Hub
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      - name: Build Docker Image
+        run: docker build -t $DOCKER_IMAGE .
+
+      - name: Push Docker Image to Docker Hub
+        run: docker push $DOCKER_IMAGE
+
+  deploy-to-aks:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Get AKS Credentials
+        run: az aks get-credentials --resource-group $RESOURCE_GROUP --name $CLUSTER_NAME
+
+      - name: Deploy to AKS
+        run: |
+          kubectl apply -f k8s/checkpoint-pvc.yaml
+          kubectl apply -f k8s/model-pvc.yaml
+          kubectl apply -f k8s/rbac.yaml
+          kubectl apply -f k8s/statefulset.yaml
+          kubectl apply -f k8s/service.yaml
+
+      - name: Verify Deployment
+        run: kubectl get pods -n $AKS_NAMESPACE
