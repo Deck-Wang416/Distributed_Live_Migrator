@@ -10,7 +10,12 @@ spec:
     volumeMounts:
     - mountPath: "/app/models"
       name: model-storage
+    - mountPath: "/app/checkpoints"
+      name: checkpoint-storage
   volumes:
   - name: model-storage
     persistentVolumeClaim:
       claimName: model-pvc
+  - name: checkpoint-storage
+    persistentVolumeClaim:
+      claimName: checkpoint-pvc

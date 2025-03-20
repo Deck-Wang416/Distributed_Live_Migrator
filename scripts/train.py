@@ -70,18 +70,15 @@ def main():
     # Load checkpoint if available
     checkpoint_dir = "/app/checkpoints"
     os.makedirs(checkpoint_dir, exist_ok=True)
-    start_epoch = 0
-    checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_epoch_{start_epoch + 1}_worker_{local_rank}.pt")
-    if os.path.exists(checkpoint_path):
-        start_epoch = load_checkpoint(checkpoint_path, model, optimizer)
-    
+    start_epoch = load_checkpoint(model, optimizer, rank)
+
     # Move model to the selected device
     model.to(device)
 
     # Use DistributedDataParallel
     model = DDP(model)
 
-    # Training loop
+    dist.barrier()  # Ensure all nodes start together
     for epoch in range(start_epoch, 3):  # Start from the restored epoch
         model.train()
         total_loss = 0
@@ -106,10 +103,15 @@ def main():
         print(f"Epoch {epoch + 1}, Average Loss: {avg_loss:.4f}")
 
         # Save checkpoint
-        save_checkpoint(model, optimizer, epoch + 1, file_path=f"{checkpoint_dir}/checkpoint_epoch_{epoch + 1}_worker_{local_rank}.pt")
+        save_checkpoint(model, optimizer, epoch + 1, rank)
+
+        # Synchronous training
+        dist.barrier()
+
+    dist.barrier()  # Ensure all nodes finish training before validation
 
     # Validation
-    print("Starting validation...")
+    print("Starting validation.")
     model.eval()
     correct = 0
     total = 0

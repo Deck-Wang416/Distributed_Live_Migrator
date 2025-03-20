@@ -32,30 +32,45 @@ def load_model(save_dir):
     print(f"Model loaded from {save_dir}")
     return model, tokenizer
 
-def save_checkpoint(model, optimizer, epoch, file_path):
+def save_checkpoint(model, optimizer, epoch, rank):
     """
-    Save the model state, optimizer state, and current epoch to the specified file.
+    Save the model state, optimizer state, and current epoch to the specified file for each worker.
     """
-    if dist.get_rank() == 0:  # Only the main process saves the checkpoint
-        checkpoint = {
-            "model_state_dict": model.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-            "epoch": epoch,
-        }
-        torch.save(checkpoint, file_path)
-        print(f"Checkpoint saved at {file_path}")
+    checkpoint_dir = "/app/checkpoints"
+    os.makedirs(checkpoint_dir, exist_ok=True)
 
-def load_checkpoint(file_path, model, optimizer):
+    file_path = os.path.join(checkpoint_dir, f"checkpoint_epoch_{epoch}_worker_{rank}.pt")
+    checkpoint = {
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "epoch": epoch,
+    }
+    torch.save(checkpoint, file_path)
+    print(f"Checkpoint saved at {file_path} for Worker {rank}")
+
+def load_checkpoint(model, optimizer, rank):
     """
     Load the checkpoint from the specified file and restore the model, optimizer states, and epoch.
+    Each worker loads its own checkpoint.
     """
-    if os.path.exists(file_path):
-        checkpoint = torch.load(file_path, map_location="cpu")
+    checkpoint_dir = "/app/checkpoints"
+    latest_epoch = 0
+    checkpoint_path = None
+
+    # Search for the latest checkpoint for this worker
+    for epoch in range(3, 0, -1):  # Search from latest to earliest
+        path = os.path.join(checkpoint_dir, f"checkpoint_epoch_{epoch}_worker_{rank}.pt")
+        if os.path.exists(path):
+            checkpoint_path = path
+            latest_epoch = epoch
+            break
+
+    if checkpoint_path:
+        checkpoint = torch.load(checkpoint_path, map_location="cpu")
         model.load_state_dict(remove_module_prefix(checkpoint["model_state_dict"]))
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        epoch = checkpoint["epoch"]
-        print(f"Checkpoint loaded from {file_path}")
-        return epoch
+        print(f"Worker {rank} restored from {checkpoint_path}")
+        return latest_epoch
     else:
-        print(f"Checkpoint file not found: {file_path}")
+        print(f"No checkpoint found for Worker {rank}, starting from scratch.")
         return 0
