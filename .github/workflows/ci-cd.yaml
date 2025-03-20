@@ -9,7 +9,7 @@ on:
 env:
   DOCKER_IMAGE: deckwang/distributed-trainer:latest
   RESOURCE_GROUP: LiveMigrateResourceGroup
-  CLUSTER_NAME: live-migrate-cluster
+  CLUSTER_NAME: LiveMigrateAKSCluster
   AKS_NAMESPACE: default
 
 jobs:
