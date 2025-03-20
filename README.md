@@ -50,14 +50,16 @@ A distributed deep learning training tool developed based on the FairScale frame
 
 ```plaintext
 Distributed_Live_Migrator/
-├── data/                   # Dataset folder (e.g., IMDB_Dataset.csv)
-├── models/                 # Saved model files (e.g., trained BERT checkpoints)
-├── scripts/                # Training, preprocessing, and evaluation scripts
+├── .github/
+│   ├── workflows/
+│   │   ├── ci-cd.yaml       # GitHub Actions workflow for CI/CD
+├── models/                 # Saved model files (bert-base)
+├── scripts/
 │   ├── preprocess.py       # Data preprocessing
 │   ├── train.py            # Training the BERT model
 │   ├── evaluate.py         # Model evaluation
 │   └── save_and_load.py    # Checkpoint saving and loading
-├── k8s/                    # Kubernetes deployment configuration
+├── k8s/
 │   ├── headless-service.yaml   # Service configuration for inter-pod communication
 │   ├── persistent-volume.yaml  # Persistent volume and claim for data storage
 │   ├── pvc-uploader.yaml       # Utility for uploading dataset to PVC
@@ -66,11 +68,11 @@ Distributed_Live_Migrator/
 │   ├── rbac.yaml               # Role-Based Access Control configuration
 │   ├── statefulset.yaml        # StatefulSet managing distributed training pods
 │   ├── debug-pod.yaml          # Debug pod for verifying saved models
-├── .dockerignore            # Ignore unnecessary files in Docker builds
-├── .gitignore               # Ignore unnecessary files in Git repository
+├── .dockerignore
+├── .gitignore
 ├── .gitattributes           # Configuration for Git LFS
 ├── Dockerfile               # Docker image definition for training
-├── requirements.txt         # Dependencies
-├── README.md                # Project documentation
-└── TODO.md                  # Project todo list
+├── requirements.txt
+├── README.md
+└── TODO.md
 ```

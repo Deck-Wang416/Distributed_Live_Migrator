@@ -27,3 +27,5 @@
 21. Replaced `kubectl delete statefulset` with Kubernetes API calls since `kubectl` was not available in the container.
 22. Configured RBAC by creating a ClusterRole allowing StatefulSet deletion and binding it to the default ServiceAccount.
 23. Validated data parallelism by recording checkpoints for three epochs, testing failure recovery by simulating node disconnections. Verified the well-trained model through the debug pod.
+24. Refactored checkpointing logic, let each worker independently saves and loads its own checkpoints. Implemented `dist.barrier()` to synchronize training steps across all nodes.
+25. Configured a CI/CD pipeline using GitHub Actions, integrating Docker Hub for automated image builds and Azure Kubernetes Service (AKS) for seamless deployment.
