@@ -102,7 +102,6 @@ def main():
         avg_loss = total_loss / len(train_loader)
         print(f"Epoch {epoch + 1}, Average Loss: {avg_loss:.4f}")
 
-        # Save checkpoint
         save_checkpoint(model, optimizer, epoch + 1, rank)
 
         # Synchronous training
