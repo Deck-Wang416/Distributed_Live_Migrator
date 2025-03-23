@@ -75,7 +75,6 @@ def main():
     # Move model to the selected device
     model.to(device)
 
-    # Use DistributedDataParallel
     model = DDP(model)
 
     dist.barrier()  # Ensure all nodes start together
