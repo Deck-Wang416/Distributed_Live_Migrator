@@ -1,4 +1,3 @@
-from transformers import BertForSequenceClassification, BertTokenizer
 import os
 import torch
 from torch import distributed as dist
