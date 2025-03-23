@@ -77,7 +77,7 @@ def main():
 
     model = DDP(model)
 
-    dist.barrier()  # Ensure all nodes start together
+    dist.barrier()
     for epoch in range(start_epoch, 3):  # Start from the restored epoch
         model.train()
         total_loss = 0
