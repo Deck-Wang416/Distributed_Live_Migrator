@@ -23,15 +23,6 @@ def save_model(model, tokenizer, save_dir):
     else:
         print("Skipping model save as this is not the main process.")
 
-def load_model(save_dir):
-    """
-    Load the model and tokenizer from the specified directory.
-    """
-    model = BertForSequenceClassification.from_pretrained(save_dir)
-    tokenizer = BertTokenizer.from_pretrained(save_dir)
-    print(f"Model loaded from {save_dir}")
-    return model, tokenizer
-
 def save_checkpoint(model, optimizer, epoch, rank):
     """
     Save the model state, optimizer state, and current epoch to the specified file for each worker.
