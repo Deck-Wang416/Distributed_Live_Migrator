@@ -6,11 +6,10 @@ from transformers import BertForSequenceClassification, BertTokenizer, AdamW
 from transformers.utils import logging
 from sklearn.model_selection import train_test_split
 from torch import distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.data import DistributedSampler
 from preprocess import preprocess_data
 from save_and_load import save_model, save_checkpoint, load_checkpoint
 from kubernetes import client, config
+from torch import nn
 
 def main():
     # Parse RANK
@@ -38,7 +37,20 @@ def main():
     # Load tokenizer and model
     model_name = "bert-base-uncased"
     tokenizer = BertTokenizer.from_pretrained(model_name, cache_dir="/app/hf_cache")
-    model = BertForSequenceClassification.from_pretrained(model_name, num_labels=2, cache_dir="/app/hf_cache")
+    full_model = BertForSequenceClassification.from_pretrained(model_name, num_labels=2, cache_dir="/app/hf_cache")
+
+    encoder_layers = list(full_model.bert.encoder.layer)
+    if rank == 0:
+        model = nn.Sequential(
+            full_model.bert.embeddings,
+            *encoder_layers[:6]
+        )
+    else:
+        model = nn.Sequential(
+            *encoder_layers[6:],
+            full_model.bert.pooler,
+            full_model.classifier
+        )
 
     # Encode the data
     train_encodings = tokenizer(
@@ -56,13 +68,9 @@ def main():
         val_encodings["input_ids"], val_encodings["attention_mask"], torch.tensor(val_labels)
     )
 
-    # Distributed sampler to ensure each process gets different data
-    train_sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=local_rank)
-    val_sampler = DistributedSampler(val_dataset, num_replicas=world_size, rank=local_rank)
-
-    # DataLoader with DistributedSampler
-    train_loader = DataLoader(train_dataset, batch_size=2, sampler=train_sampler)
-    val_loader = DataLoader(val_dataset, batch_size=2, sampler=val_sampler)
+    # DataLoader
+    train_loader = DataLoader(train_dataset, batch_size=2)
+    val_loader = DataLoader(val_dataset, batch_size=2)
 
     # Initialize optimizer
     optimizer = AdamW(model.parameters(), lr=5e-5)
@@ -70,38 +78,42 @@ def main():
     # Load checkpoint if available
     checkpoint_dir = "/app/checkpoints"
     os.makedirs(checkpoint_dir, exist_ok=True)
-    start_epoch = load_checkpoint(model, optimizer, rank)
+    start_epoch = load_checkpoint(full_model, optimizer, rank)
 
     # Move model to the selected device
     model.to(device)
 
-    model = DDP(model)
-
     dist.barrier()
     for epoch in range(start_epoch, 3):  # Start from the restored epoch
-        model.train()
         total_loss = 0
-        train_sampler.set_epoch(epoch)  # Ensure data is shuffled differently in each epoch
         for batch in train_loader:
             input_ids, attention_mask, labels = [b.to(device) for b in batch]
 
             optimizer.zero_grad()
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-            loss = outputs.loss
 
-            loss.backward()
-            optimizer.step()
+            if rank == 0:
+                outputs = model(input_ids)
+                dist.send(tensor=outputs.detach(), dst=1)
+            else:
+                received = torch.zeros((input_ids.size(0), 768, 128)).to(device)  # shape should match output of rank 0
+                dist.recv(tensor=received, src=0)
+                received.requires_grad = True
+                final_output = model(received)
+                loss = torch.nn.functional.cross_entropy(final_output, labels)
+                loss.backward()
+                dist.send(tensor=received.grad, dst=0)
+                optimizer.step()
+                total_loss += loss.item()
 
-            total_loss += loss.item()
-
-            loss.detach()
-            del input_ids, attention_mask, labels, outputs, loss
-            torch.cuda.empty_cache()
+                grad_output = torch.zeros_like(outputs).to(device)
+                dist.recv(tensor=grad_output, src=1)
+                outputs.backward(grad_output)
+                optimizer.step()
 
         avg_loss = total_loss / len(train_loader)
         print(f"Epoch {epoch + 1}, Average Loss: {avg_loss:.4f}")
 
-        save_checkpoint(model, optimizer, epoch + 1, rank)
+        save_checkpoint(full_model, optimizer, epoch + 1, rank)
 
         # Synchronous training
         dist.barrier()
@@ -109,39 +121,40 @@ def main():
     dist.barrier()  # Ensure all nodes finish training before validation
 
     # Validation
-    print("Starting validation.")
-    model.eval()
-    correct = 0
-    total = 0
-    with torch.no_grad():
-        for batch in val_loader:
-            input_ids, attention_mask, labels = [b.to(device) for b in batch]
+    if rank == 1:
+        print("Starting validation.")
+        model.eval()
+        correct = 0
+        total = 0
+        with torch.no_grad():
+            for batch in val_loader:
+                input_ids, attention_mask, labels = [b.to(device) for b in batch]
 
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-            predictions = torch.argmax(outputs.logits, dim=-1)
-            correct += (predictions == labels).sum().item()
-            total += labels.size(0)
+                outputs = model(input_ids)
+                predictions = torch.argmax(outputs, dim=-1)
+                correct += (predictions == labels).sum().item()
+                total += labels.size(0)
 
-    accuracy = correct / total
-    print(f"Validation Accuracy: {accuracy:.4f}")
+        accuracy = correct / total
+        print(f"Validation Accuracy: {accuracy:.4f}")
 
     # Save the final model
-    save_model(model.module, tokenizer, "models/bert-base") 
-    print("Model saved successfully!")
-
-    def delete_statefulset():
-        config.load_incluster_config()
-        api_instance = client.AppsV1Api()
-        namespace = "default"
-        name = "distributed-trainer"
-
-        try:
-            api_instance.delete_namespaced_stateful_set(name, namespace)
-            print(f"StatefulSet {name} deleted successfully.")
-        except Exception as e:
-            print(f"Failed to delete StatefulSet: {e}")
-
     if rank == 0:
+        save_model(full_model.module, tokenizer, "models/bert-base") 
+        print("Model saved successfully!")
+
+        def delete_statefulset():
+            config.load_incluster_config()
+            api_instance = client.AppsV1Api()
+            namespace = "default"
+            name = "distributed-trainer"
+
+            try:
+                api_instance.delete_namespaced_stateful_set(name, namespace)
+                print(f"StatefulSet {name} deleted successfully.")
+            except Exception as e:
+                print(f"Failed to delete StatefulSet: {e}")
+
         print("Training complete. Deleting StatefulSet.")
         delete_statefulset()
 
