@@ -12,6 +12,36 @@ from save_and_load import save_model, save_checkpoint, load_checkpoint
 from kubernetes import client, config
 from torch import nn
 
+class FrontBert(nn.Module):
+    def __init__(self, embeddings, encoder_layers):
+        super().__init__()
+        self.embeddings = embeddings
+        self.encoder = nn.ModuleList(encoder_layers[:6])
+
+    def forward(self, input_ids, attention_mask):
+        x = self.embeddings(input_ids)
+        extended_attention_mask = attention_mask[:, None, None, :]
+        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        for layer_module in self.encoder:
+            x = layer_module(x, attention_mask=extended_attention_mask)[0]
+        return x
+
+class BackBert(nn.Module):
+    def __init__(self, encoder_layers, pooler, classifier):
+        super().__init__()
+        self.encoder = nn.ModuleList(encoder_layers[6:])
+        self.pooler = pooler
+        self.classifier = classifier
+
+    def forward(self, hidden_states, attention_mask):
+        extended_attention_mask = attention_mask[:, None, None, :]
+        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        for layer_module in self.encoder:
+            hidden_states = layer_module(hidden_states, attention_mask=extended_attention_mask)[0]
+        pooled_output = self.pooler(hidden_states)
+        logits = self.classifier(pooled_output)
+        return logits
+
 def main():
     # Parse RANK
     pod_name = os.environ["POD_NAME"]
@@ -49,16 +79,9 @@ def main():
 
     encoder_layers = list(full_model.bert.encoder.layer)
     if rank == 0:
-        model = nn.Sequential(
-            full_model.bert.embeddings,
-            *encoder_layers[:6]
-        )
+        model = FrontBert(full_model.bert.embeddings, encoder_layers)
     else:
-        model = nn.Sequential(
-            *encoder_layers[6:],
-            full_model.bert.pooler,
-            full_model.classifier
-        )
+        model = BackBert(encoder_layers, full_model.bert.pooler, full_model.classifier)
 
     # Encode the data
     train_encodings = tokenizer(
@@ -100,35 +123,28 @@ def main():
             optimizer.zero_grad()
 
             if rank == 0:
-                outputs = model(input_ids)
+                outputs = model(input_ids, attention_mask)
                 try:
                     fut = rpc.rpc_async(
                         to="worker1",
                         func=remote_forward,
-                        args=(outputs.detach(), labels)
+                        args=(outputs.detach(), labels, attention_mask)
                     )
-                    loss = fut.wait()
-                    loss.backward()
+                    loss, grad_output = fut.wait()
+                    outputs.backward(grad_output)
                     optimizer.step()
                     total_loss += loss.item()
                 except Exception as e:
                     print(f"RPC to worker1 failed: {e}")
-                    # 可插入备用逻辑，如等待 B 重启、转向其他节点等
             else:
-                received = torch.zeros((input_ids.size(0), 768, 128)).to(device)  # shape should match output of rank 0
+                received = torch.zeros((input_ids.size(0), 768, 128)).to(device)
                 dist.recv(tensor=received, src=0)
                 received.requires_grad = True
-                final_output = model(received)
+                final_output = model(received, attention_mask)
                 loss = torch.nn.functional.cross_entropy(final_output, labels)
                 loss.backward()
                 dist.send(tensor=received.grad, dst=0)
-                optimizer.step()
                 total_loss += loss.item()
-
-                grad_output = torch.zeros_like(outputs).to(device)
-                dist.recv(tensor=grad_output, src=1)
-                outputs.backward(grad_output)
-                optimizer.step()
 
         avg_loss = total_loss / len(train_loader)
         print(f"Epoch {epoch + 1}, Average Loss: {avg_loss:.4f}")
@@ -150,7 +166,7 @@ def main():
             for batch in val_loader:
                 input_ids, attention_mask, labels = [b.to(device) for b in batch]
 
-                outputs = model(input_ids)
+                outputs = model(input_ids, attention_mask)
                 predictions = torch.argmax(outputs, dim=-1)
                 correct += (predictions == labels).sum().item()
                 total += labels.size(0)
@@ -181,22 +197,22 @@ def main():
     sys.exit(0)
     rpc.shutdown()
 
-def remote_forward(hidden_states, labels):
+def remote_forward(hidden_states, labels, attention_mask):
     device = torch.device("cpu")
     if not hasattr(remote_forward, "model"):
         model_name = "bert-base-uncased"
         full_model = BertForSequenceClassification.from_pretrained(model_name, num_labels=2, cache_dir="/app/hf_cache")
         encoder_layers = list(full_model.bert.encoder.layer)
-        remote_forward.model = nn.Sequential(
-            *encoder_layers[6:],
+        remote_forward.model = BackBert(
+            encoder_layers,
             full_model.bert.pooler,
             full_model.classifier
         ).to(device)
     hidden_states.requires_grad = True
-    output = remote_forward.model(hidden_states)
+    output = remote_forward.model(hidden_states, attention_mask)
     loss = torch.nn.functional.cross_entropy(output, labels)
     loss.backward()
-    return loss
+    return loss, hidden_states.grad
 
 if __name__ == "__main__":
     main()
