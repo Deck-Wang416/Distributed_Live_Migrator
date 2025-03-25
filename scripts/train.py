@@ -53,10 +53,19 @@ def main():
 
     master_addr = os.environ["MASTER_ADDR"]
     master_port = os.environ.get("MASTER_PORT", "29500")
+    start_daemon = rank == 0
+    store = dist.TCPStore(
+        host_name=master_addr,
+        port=int(master_port),
+        world_size=world_size,
+        is_master=start_daemon,
+        timeout=torch.distributed.constants.default_pg_timeout
+    )
+
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16,
         rpc_timeout=60,
-        init_method=f"tcp://{master_addr}:{master_port}"
+        rpc_store=store
     )
     rpc.init_rpc(
         name=f"worker{rank}",
