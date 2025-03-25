@@ -1,6 +1,7 @@
 import os
 import sys
 import torch
+import torch.distributed.rpc as rpc
 from torch.utils.data import DataLoader, TensorDataset
 from transformers import BertForSequenceClassification, BertTokenizer, AdamW
 from transformers.utils import logging
@@ -16,10 +17,17 @@ def main():
     pod_name = os.environ["POD_NAME"]
     rank = int(pod_name.split("-")[-1])
     world_size = int(os.environ["WORLD_SIZE"])
-    local_rank = int(os.environ["LOCAL_RANK"])
     device = torch.device("cpu")
 
     dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+
+    options = rpc.TensorPipeRpcBackendOptions(num_worker_threads=16)
+    rpc.init_rpc(
+        name=f"worker{rank}",
+        rank=rank,
+        world_size=world_size,
+        rpc_backend_options=options
+    )
 
     # Load and preprocess the dataset
     train_texts, train_labels, _, _ = preprocess_data(
@@ -93,7 +101,19 @@ def main():
 
             if rank == 0:
                 outputs = model(input_ids)
-                dist.send(tensor=outputs.detach(), dst=1)
+                try:
+                    fut = rpc.rpc_async(
+                        to="worker1",
+                        func=remote_forward,
+                        args=(outputs.detach(), labels)
+                    )
+                    loss = fut.wait()
+                    loss.backward()
+                    optimizer.step()
+                    total_loss += loss.item()
+                except Exception as e:
+                    print(f"RPC to worker1 failed: {e}")
+                    # 可插入备用逻辑，如等待 B 重启、转向其他节点等
             else:
                 received = torch.zeros((input_ids.size(0), 768, 128)).to(device)  # shape should match output of rank 0
                 dist.recv(tensor=received, src=0)
@@ -140,7 +160,7 @@ def main():
 
     # Save the final model
     if rank == 0:
-        save_model(full_model.module, tokenizer, "models/bert-base") 
+        save_model(full_model, tokenizer, "models/bert-base") 
         print("Model saved successfully!")
 
         def delete_statefulset():
@@ -159,6 +179,24 @@ def main():
         delete_statefulset()
 
     sys.exit(0)
+    rpc.shutdown()
+
+def remote_forward(hidden_states, labels):
+    device = torch.device("cpu")
+    if not hasattr(remote_forward, "model"):
+        model_name = "bert-base-uncased"
+        full_model = BertForSequenceClassification.from_pretrained(model_name, num_labels=2, cache_dir="/app/hf_cache")
+        encoder_layers = list(full_model.bert.encoder.layer)
+        remote_forward.model = nn.Sequential(
+            *encoder_layers[6:],
+            full_model.bert.pooler,
+            full_model.classifier
+        ).to(device)
+    hidden_states.requires_grad = True
+    output = remote_forward.model(hidden_states)
+    loss = torch.nn.functional.cross_entropy(output, labels)
+    loss.backward()
+    return loss
 
 if __name__ == "__main__":
     main()
