@@ -51,7 +51,13 @@ def main():
 
     dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
 
-    options = rpc.TensorPipeRpcBackendOptions(num_worker_threads=16)
+    master_addr = os.environ["MASTER_ADDR"]
+    master_port = os.environ.get("MASTER_PORT", "29500")
+    options = rpc.TensorPipeRpcBackendOptions(
+        num_worker_threads=16,
+        rpc_timeout=60,
+        init_method=f"tcp://{master_addr}:{master_port}"
+    )
     rpc.init_rpc(
         name=f"worker{rank}",
         rank=rank,

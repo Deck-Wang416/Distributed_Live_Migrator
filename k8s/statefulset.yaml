@@ -29,16 +29,18 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: metadata.name
-          - name: RANK
-            value: metadata.name
           - name: WORLD_SIZE
             value: "2"
           - name: MASTER_ADDR
             value: "distributed-trainer-0.distributed-trainer.default.svc.cluster.local"
           - name: MASTER_PORT
             value: "29500"
-          - name: LOCAL_RANK
-            value: "0"
+        command:
+          - /bin/bash
+          - -c
+          - |
+            export RANK=$(echo $POD_NAME | rev | cut -d'-' -f1 | rev)
+            exec python scripts/train.py
         volumeMounts:
         - mountPath: "/app/data"
           name: data-volume
