@@ -137,14 +137,10 @@ def main():
                 except Exception as e:
                     print(f"RPC to worker1 failed: {e}")
             else:
-                received = torch.zeros((input_ids.size(0), 768, 128)).to(device)
-                dist.recv(tensor=received, src=0)
-                received.requires_grad = True
-                final_output = model(received, attention_mask)
-                loss = torch.nn.functional.cross_entropy(final_output, labels)
-                loss.backward()
-                dist.send(tensor=received.grad, dst=0)
-                total_loss += loss.item()
+                print("Rank 1 is ready to receive RPC requests.")
+                dist.barrier()
+                rpc.shutdown()
+                return
 
         avg_loss = total_loss / len(train_loader)
         print(f"Epoch {epoch + 1}, Average Loss: {avg_loss:.4f}")
