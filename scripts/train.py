@@ -204,8 +204,8 @@ def main():
         print("Training complete. Deleting StatefulSet.")
         delete_statefulset()
 
-    sys.exit(0)
     rpc.shutdown()
+    sys.exit(0)
 
 def remote_forward(hidden_states, labels, attention_mask):
     device = torch.device("cpu")
