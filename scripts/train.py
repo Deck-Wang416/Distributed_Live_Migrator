@@ -65,13 +65,13 @@ def main():
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16,
         rpc_timeout=60,
-        rpc_store=store
     )
     rpc.init_rpc(
         name=f"worker{rank}",
         rank=rank,
         world_size=world_size,
-        rpc_backend_options=options
+        rpc_backend_options=options,
+        store=store
     )
 
     # Load and preprocess the dataset
