@@ -54,19 +54,18 @@ def main():
     
     master_addr = os.environ.get("MASTER_ADDR", "localhost")
     master_port = int(os.environ.get("MASTER_PORT", 29500))
-    is_master = rank == 0
-    store = dist.TCPStore(master_addr, master_port, world_size, is_master, timeout=timedelta(seconds=300))
 
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16,
         rpc_timeout=60,
+        init_method=f"tcp://{master_addr}:{master_port}"
     )
+
     rpc.init_rpc(
         name=f"worker{rank}",
         rank=rank,
         world_size=world_size,
-        rpc_backend_options=options,
-        store=store
+        rpc_backend_options=options
     )
 
     # Load and preprocess the dataset
