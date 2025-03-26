@@ -149,7 +149,6 @@ def main():
                 total_loss += loss.item()
             else:
                 print("Rank 1 is ready to receive RPC requests.")
-                dist.barrier()
                 rpc.shutdown()
                 return
 
