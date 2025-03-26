@@ -12,6 +12,7 @@ from preprocess import preprocess_data
 from save_and_load import save_model, save_checkpoint, load_checkpoint
 from kubernetes import client, config
 from torch import nn
+import threading
 
 class FrontBert(nn.Module):
     def __init__(self, embeddings, encoder_layers):
@@ -154,8 +155,21 @@ def main():
                 optimizer.step()
                 total_loss += loss.item()
             else:
-                print("Rank 1 is ready to receive RPC requests.")
-                rpc.shutdown()
+                print(f"Rank {rank} is ready to receive RPC requests.")
+                # Keep this process alive until the main process finishes
+                def shutdown_after_timeout(timeout_sec=300):
+                    import time
+                    print(f"Worker {rank} will wait {timeout_sec}s for RPC shutdown.")
+                    time.sleep(timeout_sec)
+                    print(f"[Timeout] Worker {rank} timed out waiting. Exiting...")
+                    rpc.shutdown()
+                    sys.exit(0)
+
+                threading.Thread(target=shutdown_after_timeout, daemon=True).start()
+                try:
+                    rpc.shutdown()  # Blocks until triggered by main rank
+                except Exception as e:
+                    print(f"[RPC Shutdown Error] {e}")
                 return
 
         avg_loss = total_loss / len(train_loader)
