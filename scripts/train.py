@@ -51,17 +51,6 @@ def main():
 
     dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
 
-    master_addr = os.environ["MASTER_ADDR"]
-    master_port = os.environ.get("MASTER_PORT", "29500")
-    start_daemon = rank == 0
-    store = dist.TCPStore(
-        host_name=master_addr,
-        port=int(master_port),
-        world_size=world_size,
-        is_master=start_daemon,
-        timeout=torch.distributed.constants.default_pg_timeout
-    )
-
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16,
         rpc_timeout=60,
@@ -70,8 +59,7 @@ def main():
         name=f"worker{rank}",
         rank=rank,
         world_size=world_size,
-        rpc_backend_options=options,
-        store=store
+        rpc_backend_options=options
     )
 
     # Load and preprocess the dataset
