@@ -7,6 +7,7 @@ from transformers import BertForSequenceClassification, BertTokenizer, AdamW
 from transformers.utils import logging
 from sklearn.model_selection import train_test_split
 from torch import distributed as dist
+from datetime import timedelta
 from preprocess import preprocess_data
 from save_and_load import save_model, save_checkpoint, load_checkpoint
 from kubernetes import client, config
@@ -50,6 +51,11 @@ def main():
     device = torch.device("cpu")
 
     dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+    
+    master_addr = os.environ.get("MASTER_ADDR", "localhost")
+    master_port = int(os.environ.get("MASTER_PORT", 29500))
+    is_master = rank == 0
+    store = dist.TCPStore(master_addr, master_port, world_size, is_master, timeout=timedelta(seconds=300))
 
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16,
@@ -59,7 +65,8 @@ def main():
         name=f"worker{rank}",
         rank=rank,
         world_size=world_size,
-        rpc_backend_options=options
+        rpc_backend_options=options,
+        store=store
     )
 
     # Load and preprocess the dataset
