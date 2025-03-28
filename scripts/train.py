@@ -121,6 +121,9 @@ def main():
 
     # Move model to the selected device
     model.to(device)
+    if rank != 0:
+        global worker_model
+        worker_model = model
 
     dist.barrier()
     if rank == 0:
@@ -204,16 +207,9 @@ def main():
     sys.exit(0)
 
 def remote_forward(hidden_states, labels, attention_mask):
-    device = torch.device("cpu")
+    global worker_model
     if not hasattr(remote_forward, "model"):
-        model_name = "bert-base-uncased"
-        full_model = BertForSequenceClassification.from_pretrained(model_name, num_labels=2, cache_dir="/app/hf_cache")
-        encoder_layers = list(full_model.bert.encoder.layer)
-        remote_forward.model = BackBert(
-            encoder_layers,
-            full_model.bert.pooler,
-            full_model.classifier
-        ).to(device)
+        remote_forward.model = worker_model
     hidden_states.requires_grad = True
     output = remote_forward.model(hidden_states, attention_mask)
     loss = torch.nn.functional.cross_entropy(output, labels)
