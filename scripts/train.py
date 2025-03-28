@@ -11,34 +11,6 @@ from preprocess import preprocess_data
 from save_and_load import save_model, save_checkpoint, load_checkpoint
 from kubernetes import client, config
 from torch import nn
-import threading
-import hashlib
-
-def compute_state_hash(model):
-    """Compute MD5 hash of a model's state_dict."""
-    state_dict = model.state_dict()
-    md5 = hashlib.md5()
-    for key in sorted(state_dict.keys()):
-        md5.update(state_dict[key].cpu().numpy().tobytes())
-    return md5.hexdigest()
-
-def validate_worker_state(worker_hash: str):
-    """Master-side function to validate worker state using the latest checkpoint loaded in full_model."""
-    # Use the worker-related parts from full_model
-    expected_state = {}
-    for key, value in full_model.state_dict().items():
-        if key.startswith('bert.encoder.layer.') or key.startswith('bert.pooler') or key.startswith('classifier'):
-            expected_state[key] = value
-    md5 = hashlib.md5()
-    for key in sorted(expected_state.keys()):
-        md5.update(expected_state[key].cpu().numpy().tobytes())
-    expected_hash = md5.hexdigest()
-    if worker_hash == expected_hash:
-        print("State validation successful: worker state matches master checkpoint.")
-        return True
-    else:
-        print("State validation failed: worker state does not match master checkpoint.")
-        return False
 
 class FrontBert(nn.Module):
     def __init__(self, embeddings, encoder_layers):
@@ -71,7 +43,6 @@ class BackBert(nn.Module):
         return logits
 
 def main():
-    global full_model
     # Parse RANK
     pod_name = os.environ["POD_NAME"]
     rank = int(pod_name.split("-")[-1])
@@ -119,8 +90,6 @@ def main():
         model = FrontBert(full_model.bert.embeddings, encoder_layers)
     else:
         model = BackBert(encoder_layers, full_model.bert.pooler, full_model.classifier)
-        # Assign the worker's model to remote_forward for RPC calls
-        remote_forward.model = model
 
     # Encode the data
     train_encodings = tokenizer(
@@ -154,15 +123,17 @@ def main():
     model.to(device)
 
     dist.barrier()
-    for epoch in range(start_epoch, 3):  # Start from the restored epoch
-        total_loss = 0
-        for batch in train_loader:
-            input_ids, attention_mask, labels = [b.to(device) for b in batch]
+    if rank == 0:
+        for epoch in range(start_epoch, 3):
+            total_loss = 0
+            for batch in train_loader:
+                input_ids, attention_mask, labels = [b.to(device) for b in batch]
+                optimizer.zero_grad()
 
-            optimizer.zero_grad()
-
-            if rank == 0:
+                # Forward pass on master
                 outputs = model(input_ids, attention_mask)
+                
+                # RPC call to worker1 for the second half forward/backward
                 try:
                     fut = rpc.rpc_async(
                         to="worker1",
@@ -183,54 +154,14 @@ def main():
                 outputs.backward(grad_output)
                 optimizer.step()
                 total_loss += loss.item()
-            else:
-                print(f"Rank {rank} is ready to receive RPC requests.")
-                # Keep this process alive until the main process finishes
-                def shutdown_after_timeout(timeout_sec=300):
-                    import time
-                    print(f"Worker {rank} will wait {timeout_sec}s for RPC shutdown.")
-                    time.sleep(timeout_sec)
-                    print(f"[Timeout] Worker {rank} timed out waiting. Exiting...")
-                    rpc.shutdown()
-                    sys.exit(0)
+            
+            avg_loss = total_loss / len(train_loader)
+            print(f"Epoch {epoch + 1}, Average Loss: {avg_loss:.4f}")
 
-                threading.Thread(target=shutdown_after_timeout, daemon=True).start()
-                try:
-                    rpc.shutdown()  # Blocks until triggered by main rank
-                except Exception as e:
-                    print(f"[RPC Shutdown Error] {e}")
-                return
-
-        avg_loss = total_loss / len(train_loader)
-        print(f"Epoch {epoch + 1}, Average Loss: {avg_loss:.4f}")
-
-        save_checkpoint(full_model, optimizer, epoch + 1, rank)
-
-        # Synchronous training
-        dist.barrier()
-
-    dist.barrier()  # Ensure all nodes finish training before validation
-
-    # Validation
-    if rank == 1:
-        print("Starting validation.")
-        model.eval()
-        correct = 0
-        total = 0
-        with torch.no_grad():
-            for batch in val_loader:
-                input_ids, attention_mask, labels = [b.to(device) for b in batch]
-
-                outputs = model(input_ids, attention_mask)
-                predictions = torch.argmax(outputs, dim=-1)
-                correct += (predictions == labels).sum().item()
-                total += labels.size(0)
-
-        accuracy = correct / total
-        print(f"Validation Accuracy: {accuracy:.4f}")
-
-    # Save the final model
-    if rank == 0:
+            save_checkpoint(full_model, optimizer, epoch + 1, rank)
+            dist.barrier()
+        
+        # After training loop, master saves the final model and cleans up
         save_model(full_model, tokenizer, "models/bert-base") 
         print("Model saved successfully!")
 
@@ -239,7 +170,6 @@ def main():
             api_instance = client.AppsV1Api()
             namespace = "default"
             name = "distributed-trainer"
-
             try:
                 api_instance.delete_namespaced_stateful_set(name, namespace)
                 print(f"StatefulSet {name} deleted successfully.")
@@ -248,35 +178,42 @@ def main():
 
         print("Training complete. Deleting StatefulSet.")
         delete_statefulset()
+        dist.barrier()
+    else:
+        # Worker nodes simply participate in the barrier each epoch to stay in sync and serve RPC requests
+        for epoch in range(start_epoch, 3):
+            dist.barrier()
+        
+        if rank == 1:
+            print("Starting validation.")
+            model.eval()
+            correct = 0
+            total = 0
+            with torch.no_grad():
+                for batch in val_loader:
+                    input_ids, attention_mask, labels = [b.to(device) for b in batch]
+                    outputs = model(input_ids, attention_mask)
+                    predictions = torch.argmax(outputs, dim=-1)
+                    correct += (predictions == labels).sum().item()
+                    total += labels.size(0)
+            accuracy = correct / total
+            print(f"Validation Accuracy: {accuracy:.4f}")
+        dist.barrier()
 
     rpc.shutdown()
     sys.exit(0)
 
 def remote_forward(hidden_states, labels, attention_mask):
     device = torch.device("cpu")
-    # Use the model already assigned during worker initialization; if not, fallback
     if not hasattr(remote_forward, "model"):
-        # Fallback: load from pretrained (should not occur if worker was properly initialized)
         model_name = "bert-base-uncased"
-        full_model_local = BertForSequenceClassification.from_pretrained(model_name, num_labels=2, cache_dir="/app/hf_cache")
-        encoder_layers = list(full_model_local.bert.encoder.layer)
+        full_model = BertForSequenceClassification.from_pretrained(model_name, num_labels=2, cache_dir="/app/hf_cache")
+        encoder_layers = list(full_model.bert.encoder.layer)
         remote_forward.model = BackBert(
             encoder_layers,
-            full_model_local.bert.pooler,
-            full_model_local.classifier
+            full_model.bert.pooler,
+            full_model.classifier
         ).to(device)
-    
-    # Perform state validation if not done already
-    if not hasattr(remote_forward, "state_validated"):
-        worker_hash = compute_state_hash(remote_forward.model)
-        # Assume master is named 'worker0'
-        validation_ok = rpc.rpc_sync("worker0", validate_worker_state, args=(worker_hash,))
-        if not validation_ok:
-            print("Worker state validation failed. Aborting remote_forward.")
-            # Optionally, you can add logic here to retry loading the checkpoint
-        else:
-            remote_forward.state_validated = True
-    
     hidden_states.requires_grad = True
     output = remote_forward.model(hidden_states, attention_mask)
     loss = torch.nn.functional.cross_entropy(output, labels)
