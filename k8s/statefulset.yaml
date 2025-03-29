@@ -39,8 +39,7 @@ spec:
           - /bin/bash
           - -c
           - |
-            export RANK=$(echo $POD_NAME | rev | cut -d'-' -f1 | rev)
-            exec python scripts/train.py
+              exec torchrun --nproc_per_node=1 --nnodes=3 --rdzv_backend=c10d --rdzv_endpoint=distributed-trainer-0.distributed-trainer.default.svc.cluster.local:29500 scripts/train.py
         volumeMounts:
         - mountPath: "/app/data"
           name: data-volume

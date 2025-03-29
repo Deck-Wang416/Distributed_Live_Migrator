@@ -43,23 +43,22 @@ class BackBert(nn.Module):
         return logits
 
 def main():
-    # Parse RANK
-    pod_name = os.environ["POD_NAME"]
-    rank = int(pod_name.split("-")[-1])
-    world_size = int(os.environ["WORLD_SIZE"])
     device = torch.device("cpu")
 
-    dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
-    
-    master_addr = os.environ.get("MASTER_ADDR", "localhost")
-    master_port = int(os.environ.get("MASTER_PORT", 29500))
+    if "RANK" in os.environ:
+        rank = int(os.environ["RANK"])
+    else:
+        pod_name = os.environ["POD_NAME"]
+        rank = int(pod_name.split("-")[-1])
 
+    world_size = int(os.environ["WORLD_SIZE"])
+
+    dist.init_process_group(backend="gloo")
+    
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16,
-        rpc_timeout=60,
-        init_method=f"tcp://{master_addr}:{master_port}"
+        rpc_timeout=60
     )
-
     rpc.init_rpc(
         name=f"worker{rank}",
         rank=rank,
