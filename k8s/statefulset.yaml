@@ -4,7 +4,7 @@ metadata:
   name: distributed-trainer
 spec:
   serviceName: "distributed-trainer"
-  replicas: 2
+  replicas: 3
   selector:
     matchLabels:
       app: distributed-trainer
@@ -30,7 +30,7 @@ spec:
               fieldRef:
                 fieldPath: metadata.name
           - name: WORLD_SIZE
-            value: "2"
+            value: "3"
           - name: MASTER_ADDR
             value: "distributed-trainer-0.distributed-trainer.default.svc.cluster.local"
           - name: MASTER_PORT
