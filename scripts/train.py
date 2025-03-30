@@ -180,7 +180,6 @@ def main():
 
         print("Training complete. Deleting StatefulSet.")
         delete_statefulset()
-        dist.barrier()
     else:
         # Worker nodes simply participate in the barrier each epoch to stay in sync and serve RPC requests
         for epoch in range(start_epoch, 3):
@@ -200,8 +199,8 @@ def main():
                     total += labels.size(0)
             accuracy = correct / total
             print(f"Validation Accuracy: {accuracy:.4f}")
-        dist.barrier()
 
+    dist.barrier()
     rpc.shutdown()
     sys.exit(0)
 
