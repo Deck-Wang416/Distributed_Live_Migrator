@@ -4,7 +4,7 @@ metadata:
   name: distributed-trainer
 spec:
   serviceName: "distributed-trainer"
-  replicas: 3
+  replicas: 2
   selector:
     matchLabels:
       app: distributed-trainer
@@ -30,7 +30,7 @@ spec:
               fieldRef:
                 fieldPath: metadata.name
           - name: WORLD_SIZE
-            value: "3"
+            value: "2"
           - name: MASTER_ADDR
             value: "distributed-trainer-0.distributed-trainer.default.svc.cluster.local"
           - name: MASTER_PORT
@@ -39,7 +39,8 @@ spec:
           - /bin/bash
           - -c
           - |
-              exec torchrun --nproc_per_node=1 --nnodes=3 --rdzv_backend=c10d --rdzv_endpoint=distributed-trainer-0.distributed-trainer.default.svc.cluster.local:29500 --rdzv_conf rdzv_timeout=3600 scripts/train.py
+            export RANK=$(echo $POD_NAME | rev | cut -d'-' -f1 | rev)
+            exec python scripts/train.py
         volumeMounts:
         - mountPath: "/app/data"
           name: data-volume
