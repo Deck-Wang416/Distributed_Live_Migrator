@@ -1,5 +1,5 @@
 # Distributed Live Migrator
-A distributed deep learning training tool developed based on the FairScale framework, designed to enable real-time migration of BERT-Base training tasks across multiple nodes.
+A distributed deep learning training tool designed to enable real-time migration of BERT-Base training tasks across multiple nodes.
 
 ## Features
 - **Real-time Migration**: Support for checkpoint saving and recovery during training.
@@ -57,7 +57,6 @@ Distributed_Live_Migrator/
 ├── scripts/
 │   ├── preprocess.py       # Data preprocessing
 │   ├── train.py            # Training the BERT model
-│   ├── evaluate.py         # Model evaluation
 │   └── save_and_load.py    # Checkpoint saving and loading
 ├── k8s/
 │   ├── headless-service.yaml   # Service configuration for inter-pod communication
@@ -71,6 +70,7 @@ Distributed_Live_Migrator/
 ├── .dockerignore
 ├── .gitignore
 ├── .gitattributes           # Configuration for Git LFS
+├── .debug-helper.sh         # Script for testing model parallelism
 ├── Dockerfile               # Docker image definition for training
 ├── requirements.txt
 ├── README.md
