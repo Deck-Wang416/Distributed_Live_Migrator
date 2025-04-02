@@ -12,6 +12,7 @@ from save_and_load import save_model, save_checkpoint, load_checkpoint
 from kubernetes import client, config
 from torch import nn
 
+# Processes input embeddings and the first six Transformer layers.
 class FrontBert(nn.Module):
     def __init__(self, embeddings, encoder_layers):
         super().__init__()
@@ -26,6 +27,7 @@ class FrontBert(nn.Module):
             x = layer_module(x, attention_mask=extended_attention_mask)[0]
         return x
 
+# Processes the remaining Transformer layers, pooling, and classification.
 class BackBert(nn.Module):
     def __init__(self, encoder_layers, pooler, classifier):
         super().__init__()
@@ -50,11 +52,12 @@ def main():
     else:
         pod_name = os.environ["POD_NAME"]
         rank = int(pod_name.split("-")[-1])
-
     world_size = int(os.environ["WORLD_SIZE"])
 
+    # Using the gloo backend.
     dist.init_process_group(backend="gloo")
     
+    # Initialize the RPC framework with TensorPipe as underlying protocol.
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16,
         rpc_timeout=60
@@ -66,76 +69,64 @@ def main():
         rpc_backend_options=options
     )
 
-    # Load and preprocess the dataset
+    # Data preprocessing and loading.
     train_texts, train_labels, _, _ = preprocess_data(
         "data/IMDB_Dataset.csv", train_size=1000, test_size=500
     )
-
-    # Split the training data into training and validation sets
     train_texts, val_texts, train_labels, val_labels = train_test_split(
         train_texts, train_labels, test_size=0.2, random_state=42
     )
-
-    # Set logging to reduce memory usage
     logging.set_verbosity_error()
 
-    # Load tokenizer and model
+    # Load tokenizer and pre-trained BERT model.
     model_name = "bert-base-uncased"
     tokenizer = BertTokenizer.from_pretrained(model_name, cache_dir="/app/hf_cache")
     full_model = BertForSequenceClassification.from_pretrained(model_name, num_labels=2, cache_dir="/app/hf_cache")
-
     encoder_layers = list(full_model.bert.encoder.layer)
+
+    # Split model
     if rank == 0:
         model = FrontBert(full_model.bert.embeddings, encoder_layers)
     else:
         model = BackBert(encoder_layers, full_model.bert.pooler, full_model.classifier)
 
-    # Encode the data
+    # Encode data and create DataLoaders.
     train_encodings = tokenizer(
         train_texts, truncation=True, padding=True, max_length=128, return_tensors="pt"
     )
     val_encodings = tokenizer(
         val_texts, truncation=True, padding=True, max_length=128, return_tensors="pt"
     )
-
-    # Create datasets
     train_dataset = TensorDataset(
         train_encodings["input_ids"], train_encodings["attention_mask"], torch.tensor(train_labels)
     )
     val_dataset = TensorDataset(
         val_encodings["input_ids"], val_encodings["attention_mask"], torch.tensor(val_labels)
     )
-
-    # DataLoader
     train_loader = DataLoader(train_dataset, batch_size=2)
     val_loader = DataLoader(val_dataset, batch_size=2)
 
-    # Initialize optimizer
+    # Initialize optimizer and load checkpoint if available.
     optimizer = AdamW(model.parameters(), lr=5e-5)
-
-    # Load checkpoint if available
     checkpoint_dir = "/app/checkpoints"
     os.makedirs(checkpoint_dir, exist_ok=True)
     start_epoch = load_checkpoint(full_model, optimizer, rank)
 
-    # Move model to the selected device
     model.to(device)
     if rank != 0:
         global worker_model
         worker_model = model
 
     dist.barrier()
+
+    # Perform forward on FrontBert and use RPC for BackBert computation.
     if rank == 0:
         for epoch in range(start_epoch, 3):
             total_loss = 0
             for batch in train_loader:
                 input_ids, attention_mask, labels = [b.to(device) for b in batch]
                 optimizer.zero_grad()
-
-                # Forward pass on master
                 outputs = model(input_ids, attention_mask)
-                
-                # RPC call to worker1 for the second half forward/backward
                 try:
                     fut = rpc.rpc_async(
                         to="worker1",
@@ -152,19 +143,16 @@ def main():
                         args=(outputs.detach(), labels, attention_mask)
                     )
                     loss, grad_output = fut.wait()
-
                 outputs.backward(grad_output)
                 optimizer.step()
                 total_loss += loss.item()
             
             avg_loss = total_loss / len(train_loader)
             print(f"Epoch {epoch + 1}, Average Loss: {avg_loss:.4f}")
-
             save_checkpoint(full_model, optimizer, epoch + 1, rank)
             dist.barrier()
         
-        # After training loop, master saves the final model and cleans up
-        save_model(full_model, tokenizer, "models/bert-base") 
+        save_model(full_model, tokenizer, "models/bert-base")
         print("Model saved successfully!")
 
         def delete_statefulset():
@@ -181,10 +169,9 @@ def main():
         print("Training complete. Deleting StatefulSet.")
         delete_statefulset()
     else:
-        # Worker nodes simply participate in the barrier each epoch to stay in sync and serve RPC requests
+        # Only participate in barrier synchronization and serve RPC requests.
         for epoch in range(start_epoch, 3):
             dist.barrier()
-        
         if rank == 1:
             print("Starting validation.")
             model.eval()
@@ -204,8 +191,10 @@ def main():
     rpc.shutdown()
     sys.exit(0)
 
+# Executed on worker nodes for back-end computation.
 def remote_forward(hidden_states, labels, attention_mask):
     global worker_model
+    # Lazy Loading
     if not hasattr(remote_forward, "model"):
         remote_forward.model = worker_model
     hidden_states.requires_grad = True
