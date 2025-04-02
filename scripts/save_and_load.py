@@ -6,7 +6,7 @@ def remove_module_prefix(state_dict):
     """Remove 'module.' prefix from DistributedDataParallel models"""
     new_state_dict = {}
     for k, v in state_dict.items():
-        new_key = k.replace("module.", "")  # Remove "module." prefix
+        new_key = k.replace("module.", "")
         new_state_dict[new_key] = v
     return new_state_dict
 
@@ -15,7 +15,7 @@ def save_model(model, tokenizer, save_dir):
     Save the model and tokenizer to the specified directory.
     Ensures only the main process performs the save operation.
     """
-    if dist.get_rank() == 0:  # Only the main process saves the model
+    if dist.get_rank() == 0:
         model.save_pretrained(save_dir)
         tokenizer.save_pretrained(save_dir)
         print(f"Model saved to {save_dir}")
@@ -48,7 +48,7 @@ def load_checkpoint(model, optimizer, rank):
     checkpoint_path = None
 
     # Search for the latest checkpoint for this worker
-    for epoch in range(3, 0, -1):  # Search from latest to earliest
+    for epoch in range(3, 0, -1):
         path = os.path.join(checkpoint_dir, f"checkpoint_epoch_{epoch}_worker_{rank}.pt")
         if os.path.exists(path):
             checkpoint_path = path
