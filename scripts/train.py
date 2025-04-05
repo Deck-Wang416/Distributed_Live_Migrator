@@ -12,7 +12,7 @@ from save_and_load import save_model, save_checkpoint, load_checkpoint
 from kubernetes import client, config
 from torch import nn
 
-# Processes input embeddings and the first six Transformer layers.
+# Processes input embeddings and the first six Transformer layers
 class FrontBert(nn.Module):
     def __init__(self, embeddings, encoder_layers):
         super().__init__()
