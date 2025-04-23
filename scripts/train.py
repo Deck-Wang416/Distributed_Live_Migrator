@@ -135,14 +135,8 @@ def main():
                     )
                     loss, grad_output = fut.wait()
                 except Exception as e:
-                    print(f"[Warning] RPC to worker1 failed: {e}")
-                    print("Retrying with worker2 as fallback.")
-                    fut = rpc.rpc_async(
-                        to="worker2",
-                        func=remote_forward,
-                        args=(outputs.detach(), labels, attention_mask)
-                    )
-                    loss, grad_output = fut.wait()
+                    print(f"[Error] RPC to worker1 failed: {e}")
+                    raise
                 outputs.backward(grad_output)
                 optimizer.step()
                 total_loss += loss.item()
