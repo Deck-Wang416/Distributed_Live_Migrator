@@ -2,6 +2,7 @@ import os
 import sys
 import torch
 import torch.distributed.rpc as rpc
+from datetime import timedelta
 from torch.utils.data import DataLoader, TensorDataset
 from transformers import BertForSequenceClassification, BertTokenizer, AdamW
 from transformers.utils import logging
@@ -12,7 +13,7 @@ from save_and_load import save_model, save_checkpoint, load_checkpoint
 from kubernetes import client, config
 from torch import nn
 
-# Processes input embeddings and the first six Transformer layers.
+# Processes input embeddings and the first six Transformer layers
 class FrontBert(nn.Module):
     def __init__(self, embeddings, encoder_layers):
         super().__init__()
@@ -55,7 +56,7 @@ def main():
     world_size = int(os.environ["WORLD_SIZE"])
 
     # Using the gloo backend.
-    dist.init_process_group(backend="gloo")
+    dist.init_process_group(backend='gloo', timeout=timedelta(seconds=120))
     
     # Initialize the RPC framework with TensorPipe as underlying protocol.
     options = rpc.TensorPipeRpcBackendOptions(
@@ -136,7 +137,8 @@ def main():
                     loss, grad_output = fut.wait()
                 except Exception as e:
                     print(f"[Warning] RPC to worker1 failed: {e}")
-
+                    rpc.shutdown()
+                    sys.exit(1)
                 outputs.backward(grad_output)
                 optimizer.step()
                 total_loss += loss.item()
