@@ -52,7 +52,9 @@ def main():
     else:
         pod_name = os.environ["POD_NAME"]
         rank = int(pod_name.split("-")[-1])
+
     world_size = int(os.environ["WORLD_SIZE"])
+    max_epochs = int(os.getenv("MAX_EPOCHS", 3))
 
     # Using the gloo backend.
     dist.init_process_group(backend="gloo")
@@ -117,85 +119,93 @@ def main():
         global worker_model
         worker_model = model
 
-    dist.barrier()
+    try:
+        dist.barrier()
 
-    # Perform forward on FrontBert and use RPC for BackBert computation.
-    if rank == 0:
-        for epoch in range(start_epoch, 3):
-            total_loss = 0
-            for batch in train_loader:
-                input_ids, attention_mask, labels = [b.to(device) for b in batch]
-                optimizer.zero_grad()
-                outputs = model(input_ids, attention_mask)
-                try:
-                    fut = rpc.rpc_async(
-                        to="worker1",
-                        func=remote_forward,
-                        args=(outputs.detach(), labels, attention_mask)
-                    )
-                    loss, grad_output = fut.wait()
-                except Exception as e:
-                    print(f"[Error] RPC to worker1 failed: {e}")
-                    raise
-                outputs.backward(grad_output)
-                optimizer.step()
-                total_loss += loss.item()
-            
-            avg_loss = total_loss / len(train_loader)
-            print(f"Epoch {epoch + 1}, Average Loss: {avg_loss:.4f}")
-            save_checkpoint(full_model, optimizer, epoch + 1, rank)
-            dist.barrier()
-        
-        save_model(full_model, tokenizer, "models/bert-base")
-        print("Model saved successfully!")
-
-        def delete_statefulset():
-            config.load_incluster_config()
-            api_instance = client.AppsV1Api()
-            namespace = "default"
-            name = "distributed-trainer"
-            try:
-                api_instance.delete_namespaced_stateful_set(name, namespace)
-                print(f"StatefulSet {name} deleted successfully.")
-            except Exception as e:
-                print(f"Failed to delete StatefulSet: {e}")
-
-        print("Training complete. Deleting StatefulSet.")
-        delete_statefulset()
-    else:
-        # Only participate in barrier synchronization and serve RPC requests.
-        for epoch in range(start_epoch, 3):
-            dist.barrier()
-        if rank == 1:
-            print("Starting validation.")
-            model.eval()
-            correct = 0
-            total = 0
-            with torch.no_grad():
-                for batch in val_loader:
+        # Perform forward on FrontBert and use RPC for BackBert computation.
+        if rank == 0:
+            for epoch in range(start_epoch, max_epochs):
+                total_loss = 0
+                for batch in train_loader:
                     input_ids, attention_mask, labels = [b.to(device) for b in batch]
+                    optimizer.zero_grad()
                     outputs = model(input_ids, attention_mask)
-                    predictions = torch.argmax(outputs, dim=-1)
-                    correct += (predictions == labels).sum().item()
-                    total += labels.size(0)
-            accuracy = correct / total
-            print(f"Validation Accuracy: {accuracy:.4f}")
+                    try:
+                        fut = rpc.rpc_async(
+                            to="worker1",
+                            func=remote_forward,
+                            args=(outputs.detach(), labels, attention_mask)
+                        )
+                        loss, grad_output = fut.wait()
+                    except Exception as e:
+                        print(f"[Error] RPC to worker1 failed: {e}")
+                        dist.barrier()
+                        rpc.shutdown()
+                        sys.exit(1)
+                    outputs.backward(grad_output)
+                    optimizer.step()
+                    total_loss += loss.item()
+                
+                avg_loss = total_loss / len(train_loader)
+                print(f"Epoch {epoch + 1}, Average Loss: {avg_loss:.4f}")
+                save_checkpoint(full_model, optimizer, epoch + 1, rank)
+                dist.barrier()
+            
+            save_model(full_model, tokenizer, "models/bert-base")
+            print("Model saved successfully!")
 
-    dist.barrier()
-    rpc.shutdown()
-    sys.exit(0)
+            def delete_statefulset():
+                config.load_incluster_config()
+                api_instance = client.AppsV1Api()
+                namespace = "default"
+                name = "distributed-trainer"
+                try:
+                    api_instance.delete_namespaced_stateful_set(name, namespace)
+                    print(f"StatefulSet {name} deleted successfully.")
+                except Exception as e:
+                    print(f"Failed to delete StatefulSet: {e}")
+
+            print("Training complete. Deleting StatefulSet.")
+            delete_statefulset()
+        else:
+            # Only participate in barrier synchronization and serve RPC requests.
+            for epoch in range(start_epoch, max_epochs):
+                dist.barrier()
+            if rank == 1:
+                print("Starting validation.")
+                model.eval()
+                correct = 0
+                total = 0
+                with torch.no_grad():
+                    for batch in val_loader:
+                        input_ids, attention_mask, labels = [b.to(device) for b in batch]
+                        outputs = model(input_ids, attention_mask)
+                        predictions = torch.argmax(outputs, dim=-1)
+                        correct += (predictions == labels).sum().item()
+                        total += labels.size(0)
+                accuracy = correct / total
+                print(f"Validation Accuracy: {accuracy:.4f}")
+
+    finally:
+        dist.barrier()
+        rpc.shutdown()
+        sys.exit(0)
 
 # Executed on worker nodes for back-end computation.
 def remote_forward(hidden_states, labels, attention_mask):
     global worker_model
-    # Lazy Loading
-    if not hasattr(remote_forward, "model"):
-        remote_forward.model = worker_model
-    hidden_states.requires_grad = True
-    output = remote_forward.model(hidden_states, attention_mask)
-    loss = torch.nn.functional.cross_entropy(output, labels)
-    loss.backward()
-    return loss, hidden_states.grad
+    try:
+        # Lazy Loading
+        if not hasattr(remote_forward, "model"):
+            remote_forward.model = worker_model
+        hidden_states.requires_grad = True
+        output = remote_forward.model(hidden_states, attention_mask)
+        loss = torch.nn.functional.cross_entropy(output, labels)
+        loss.backward()
+        return loss, hidden_states.grad
+    except Exception as e:
+        print(f"[Worker] remote_forward failed: {e}")
+        raise
 
 if __name__ == "__main__":
     main()
