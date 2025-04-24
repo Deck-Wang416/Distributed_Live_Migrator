@@ -1,5 +1,7 @@
 import os
 import sys
+import socket
+import time
 import torch
 import torch.distributed.rpc as rpc
 from torch.utils.data import DataLoader, TensorDataset
@@ -43,6 +45,18 @@ class BackBert(nn.Module):
         pooled_output = self.pooler(hidden_states)
         logits = self.classifier(pooled_output)
         return logits
+
+def wait_for_worker(hostname, port, timeout=300):
+        print(f"[Info] Waiting for {hostname}:{port} to be reachable...")
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                with socket.create_connection((hostname, port), timeout=5):
+                    print(f"[Info] {hostname}:{port} is now reachable.")
+                    return
+            except (OSError, ConnectionRefusedError):
+                time.sleep(5)
+        raise TimeoutError(f"[Error] Timeout: {hostname}:{port} not reachable after {timeout}s")
 
 def main():
     device = torch.device("cpu")
@@ -118,6 +132,10 @@ def main():
     if rank != 0:
         global worker_model
         worker_model = model
+
+    if rank == 0:
+        wait_for_worker("distributed-trainer-1.distributed-trainer.default.svc.cluster.local", 29500)
+        time.sleep(10)
 
     try:
         dist.barrier()
