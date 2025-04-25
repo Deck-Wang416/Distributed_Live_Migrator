@@ -2,7 +2,7 @@ import os
 import sys
 import torch
 import torch.distributed.rpc as rpc
-from datetime import timedelta
+from datetime import time, timedelta
 from torch.utils.data import DataLoader, TensorDataset
 from transformers import BertForSequenceClassification, BertTokenizer, AdamW
 from transformers.utils import logging
@@ -55,6 +55,8 @@ def main():
         rank = int(pod_name.split("-")[-1])
     world_size = int(os.environ["WORLD_SIZE"])
 
+    if rank == 0:
+        time.sleep(30)
     # Using the gloo backend.
     dist.init_process_group(backend='gloo', timeout=timedelta(seconds=120))
     
