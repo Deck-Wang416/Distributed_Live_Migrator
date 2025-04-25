@@ -2,8 +2,6 @@ import os
 import sys
 import torch
 import torch.distributed.rpc as rpc
-import time
-from datetime import timedelta
 from torch.utils.data import DataLoader, TensorDataset
 from transformers import BertForSequenceClassification, BertTokenizer, AdamW
 from transformers.utils import logging
