@@ -56,10 +56,8 @@ def main():
         rank = int(pod_name.split("-")[-1])
     world_size = int(os.environ["WORLD_SIZE"])
 
-    if rank == 0:
-        time.sleep(60)
     # Using the gloo backend.
-    dist.init_process_group(backend='gloo', timeout=timedelta(seconds=180))
+    dist.init_process_group(backend='gloo')
     
     # Initialize the RPC framework with TensorPipe as underlying protocol.
     options = rpc.TensorPipeRpcBackendOptions(
