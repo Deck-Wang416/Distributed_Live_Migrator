@@ -3,7 +3,6 @@ A distributed deep learning training tool designed to enable real-time migration
 
 ## Features
 - **Real-time Migration**: Support for checkpoint saving and recovery during training.
-- **Model Parallelism**: Utilize FairScale's pipeline parallelism to distribute training across GPUs/nodes.
 - **Hugging Face Integration**: Train BERT-Base for binary classification tasks with Hugging Face Transformers.
 - **Cloud Storage**: Azure Blob Storage and Azure Files support for distributed checkpoint management.
 - **Kubernetes Deployment**: Fully integrated with Kubernetes, supporting distributed training in AKS.
